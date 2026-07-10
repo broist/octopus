@@ -1,0 +1,120 @@
+name: octopus
+
+# Note on volumes: the project is bind-mounted for live editing, but `vendor`
+# and `node_modules` are kept in named volumes. Reading tens of thousands of
+# files back through a Windows/macOS bind mount (and, here, a OneDrive-synced
+# folder) is what makes PHP requests slow — this keeps them on the Linux VM's
+# own filesystem.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    image: octopus-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - vendor:/var/www/html/vendor
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/zz-octopus.ini:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env
+    entrypoint: ["/usr/local/bin/octopus-entrypoint.sh"]
+    command: ["php-fpm"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+  vite:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - node_modules:/var/www/html/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+  queue:
+    image: octopus-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - vendor:/var/www/html/vendor
+    depends_on:
+      - app
+    env_file:
+      - .env
+    entrypoint: [""]
+    command: sh -c "until [ -f vendor/autoload.php ]; do sleep 3; done; php artisan queue:work --sleep=1 --tries=3 --max-time=3600"
+
+  scheduler:
+    image: octopus-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - vendor:/var/www/html/vendor
+    depends_on:
+      - app
+    env_file:
+      - .env
+    entrypoint: [""]
+    command: sh -c "until [ -f vendor/autoload.php ]; do sleep 3; done; while true; do php artisan schedule:run --no-interaction; sleep 60; done"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-octopus}
+      POSTGRES_USER: ${DB_USERNAME:-octopus}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-octopus}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-octopus} -d ${DB_DATABASE:-octopus}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  pgdata:
+  redisdata:
+  vendor:
+  node_modules:

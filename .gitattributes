@@ -1,0 +1,26 @@
+* text=auto eol=lf
+
+*.php text eol=lf
+*.blade.php text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf
+.env.example text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+
+/.git* export-ignore
+/tests export-ignore

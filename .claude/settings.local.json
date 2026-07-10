@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la)",
+      "Bash(ls -la \"..\")",
+      "Bash(php --version)",
+      "Bash(composer --version)",
+      "Bash(npm --version)",
+      "Bash(docker --version)",
+      "Bash(git --version)",
+      "Bash(psql --version)",
+      "Read(//c/Users/biroistvan/OneDrive/Asztali gép/AcuWall/Octopus/**)",
+      "Bash(unzip -l files.zip)",
+      "Bash(git init *)",
+      "Bash(git symbolic-ref *)",
+      "Bash(git add *)",
+      "Bash(grep -v '\\\\.gitignore$')"
+    ]
+  }
+}

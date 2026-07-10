@@ -1,0 +1,26 @@
+{
+    "name": "Octopus – Építőipari projektvezető",
+    "short_name": "Octopus",
+    "description": "Projektvezető és rendszerező rendszer építőipari cégeknek.",
+    "lang": "hu",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#F6F3EC",
+    "theme_color": "#21382E",
+    "icons": [
+        {
+            "src": "/octopus-logo.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/octopus-logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

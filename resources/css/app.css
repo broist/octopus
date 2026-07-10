@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --sidebar: #21382e;
+    --sidebar-active: #345742;
+    --accent: #2e6b4f;
+    --cream: #f6f3ec;
+    --line: #eae5db;
+    --coral: #c0503a;
+    --amber: #c98a2b;
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-cream text-ink antialiased;
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    }
+
+    /* Thin, warm scrollbars to match the material palette. */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(33, 56, 46, 0.25) transparent;
+    }
+}
+
+@layer components {
+    /* --- Cards --- */
+    .o-card {
+        @apply rounded-card border border-line bg-card shadow-card;
+    }
+
+    /* --- Sidebar menu items rendered as faint "wood beams" (spec §6) --- */
+    .beam {
+        position: relative;
+        border-radius: 3px;
+        background-color: var(--tw-wood, rgba(216, 182, 132, 0.07));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.05),
+            inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+        transition: background-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
+    }
+
+    .beam:hover {
+        background-color: rgba(216, 182, 132, 0.12);
+    }
+
+    /* Active menu item = solid, inset green "installed" beam. */
+    .beam-active {
+        background-color: var(--sidebar-active);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.12),
+            inset 0 -2px 0 rgba(0, 0, 0, 0.32);
+    }
+
+    .beam-active:hover {
+        background-color: var(--sidebar-active);
+    }
+
+    /* --- Status chips (colour-coded, spec §6) --- */
+    .chip {
+        @apply inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-xs font-medium;
+    }
+    .chip-green {
+        @apply bg-accent-50 text-accent-700;
+    }
+    .chip-coral {
+        background-color: rgba(192, 80, 58, 0.12);
+        color: #9c3d2b;
+    }
+    .chip-amber {
+        background-color: rgba(201, 138, 43, 0.14);
+        color: #8a5e17;
+    }
+    .chip-grey {
+        @apply bg-line text-ink-soft;
+    }
+
+    /* --- Buttons --- */
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:opacity-50;
+    }
+    .btn-primary {
+        @apply btn bg-accent text-white hover:bg-accent-600;
+    }
+    .btn-ghost {
+        @apply btn border border-line bg-card text-ink hover:bg-cream;
+    }
+}
