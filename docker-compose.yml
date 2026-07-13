@@ -1,10 +1,15 @@
 name: octopus
 
-# Note on volumes: the project is bind-mounted for live editing, but `vendor`
-# and `node_modules` are kept in named volumes. Reading tens of thousands of
-# files back through a Windows/macOS bind mount (and, here, a OneDrive-synced
-# folder) is what makes PHP requests slow — this keeps them on the Linux VM's
-# own filesystem.
+# Volumes: the project is bind-mounted for live editing, but `vendor` and
+# `node_modules` live in named volumes — reading tens of thousands of files back
+# through a Windows/OneDrive bind mount is what makes things slow.
+#
+# Frontend: by DEFAULT we serve the compiled production bundle (one JS/CSS file,
+# fast, robust). The `assets` service builds it on `up` and exits. The Vite HMR
+# dev server is fragile on a OneDrive-synced Windows folder (high-CPU polling,
+# occasional crashes), so it is opt-in only:
+#     docker compose --profile dev up      # run with hot-reload
+# In dev mode Vite writes public/hot and Laravel switches to the dev server.
 
 services:
   app:
@@ -39,8 +44,21 @@ services:
     depends_on:
       - app
 
+  # Builds the production frontend bundle once, then exits. Removing public/hot
+  # makes Laravel serve the compiled assets from public/build.
+  assets:
+    image: node:20-alpine
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - node_modules:/var/www/html/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run build && rm -f public/hot"
+    restart: "no"
+
+  # Opt-in hot-reload dev server:  docker compose --profile dev up
   vite:
     image: node:20-alpine
+    profiles: ["dev"]
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
@@ -48,7 +66,7 @@ services:
       - node_modules:/var/www/html/node_modules
     ports:
       - "5173:5173"
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
     environment:
       - CHOKIDAR_USEPOLLING=true
 

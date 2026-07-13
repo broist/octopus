@@ -46,6 +46,7 @@ docker compose up --build
 Az első indításkor a rendszer automatikusan:
 
 - telepíti a PHP és a Node függőségeket,
+- **legyártja a frontend production buildet** (`assets` szolgáltatás),
 - legenerálja az `APP_KEY`-t,
 - lefuttatja a migrációkat és a seedelést (jogosultságok + admin felhasználó).
 
@@ -54,10 +55,31 @@ Az első indításkor a rendszer automatikusan:
 | Szolgáltatás        | URL                        |
 | ------------------- | -------------------------- |
 | Alkalmazás          | http://localhost:8080      |
-| Vite dev szerver    | http://localhost:5173      |
 | Mailpit (e-mailek)  | http://localhost:8025      |
 | PostgreSQL          | localhost:5432             |
 | Redis               | localhost:6379             |
+
+### Frontend: kész build vs. hot-reload (fontos!)
+
+Alapból az app a **legyártott production buildet** szolgálja ki (egyetlen JS/CSS
+fájl) — ez gyors és stabil. A Vite HMR dev szervere rosszul viseli a
+OneDrive-szinkronizált Windows mappát (magas CPU-s polling, néha összeomlik,
+percekig tartó betöltés), ezért **nem** fut alapból.
+
+```bash
+# Alap: gyors, kész build kiszolgálása
+docker compose up -d
+
+# Frontend kód módosítása után újraépítés:
+docker compose up assets            # legyártja a buildet, majd kilép
+
+# Aktív frontend-fejlesztés hot-reload-dal (opcionális):
+docker compose --profile dev up     # elindítja a Vite dev szervert (:5173)
+```
+
+> Ha egyszer futtattad a `--profile dev` módot, létrejön a `public/hot` fájl, és
+> a Laravel a dev szerverre vált. A kész buildhez való visszatéréshez állítsd le
+> a dev szervert és töröld a `public/hot` fájlt (az `assets` build ezt automatikusan megteszi).
 
 ### Alapértelmezett belépés
 
