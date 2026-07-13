@@ -86,6 +86,7 @@ class Modules
     {
         return [
             'dashboard',
+            'projects',
         ];
     }
 }

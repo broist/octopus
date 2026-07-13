@@ -44,7 +44,7 @@ export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void })
             <div className="ml-auto flex items-center gap-2">
                 {canCreateProject && (
                     <Link
-                        href={route('projects.index')}
+                        href={route('projects.create')}
                         className="btn-primary hidden px-3 py-2 sm:inline-flex"
                     >
                         <Plus size={16} />
