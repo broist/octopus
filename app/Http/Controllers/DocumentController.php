@@ -178,7 +178,7 @@ class DocumentController extends Controller
                 $mime = $file->getMimeType() ?? '';
                 $category = $data['category']
                     ?: (str_starts_with($mime, 'image/') ? 'foto' : 'egyeb');
-                $disk = Document::diskForCategory($category);
+                $disk = Document::diskFor($category, (int) $file->getSize());
 
                 $document = Document::create([
                     'title' => Str::limit(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME), 190, ''),

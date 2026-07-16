@@ -64,15 +64,27 @@ class Document extends Model
     }
 
     /**
-     * Hibrid tárolás (spec §10): tervrajz S3-ra megy, HA van S3 konfigurálva;
-     * minden más (és S3 hiányában minden) a szerver-lemezre. A felhasználó felé
-     * átlátszó — a letöltés/megnyitás egységes.
+     * Hibrid tárolás (spec §10): HA van S3 konfigurálva, a tervrajzok és fotók,
+     * valamint minden nagy fájl (alapból 25 MB felett, PLANS_S3_MIN_MB-vel
+     * állítható) a felhőbe kerül; minden más — és S3 hiányában minden — a
+     * szerver-lemezre. A felhasználó felé átlátszó: a letöltés/megnyitás
+     * egységes (S3-nál presigned URL).
      */
-    public static function diskForCategory(string $category): string
+    public static function diskFor(string $category, int $sizeBytes = 0): string
     {
-        $s3Configured = (bool) config('filesystems.disks.plans.key');
+        $plans = config('filesystems.disks.plans');
 
-        return ($category === 'terv' && $s3Configured) ? 'plans' : 'documents';
+        if (empty($plans['key'])) {
+            return 'documents';
+        }
+
+        if (in_array($category, ['terv', 'foto'], true)) {
+            return 'plans';
+        }
+
+        $minBytes = ((int) ($plans['min_upload_mb'] ?? 25)) * 1024 * 1024;
+
+        return ($sizeBytes > 0 && $sizeBytes >= $minBytes) ? 'plans' : 'documents';
     }
 
     /**

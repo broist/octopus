@@ -16,6 +16,36 @@ telefonról és tabletről is használható (PWA), self-hosted Linux szerverre t
 Csak **Docker Desktop** szükséges (Windows/macOS/Linux). Minden mást
 (PHP, PostgreSQL, Redis, Node) a konténerek biztosítanak.
 
+## Éles üzemeltetés (fontos!)
+
+**Adatbiztonság frissítéskor.** A rendszer úgy készült, hogy a frissítések soha
+ne bántsák a felvitt adatokat:
+
+- induláskor csak **hozzáadó** migrációk futnak (`migrate --force`) — tábla-
+  újraépítés (`migrate:fresh`) SOHA nem fut automatikusan;
+- az alap-seeder idempotens: meglévő felhasználót, szerep-beállítást, adatot
+  nem ír felül, csak az új modulok jogosultság-neveit pótolja;
+- az adatbázis a `pgdata` nevesített Docker-kötetben él — a `docker compose
+  down` / `up` nem törli. **Amit kerülni kell éles gépen: `docker compose
+  down -v` (törli az adatbázist!) és `php artisan migrate:fresh`.**
+
+**Hol vannak a feltöltött fájlok?** S3 nélkül minden a szerveren, a
+`storage/app/documents/` mappában (dokumentumonként `doc-{id}/` almappa).
+Ez NEM kerül a git-be — mentésénél erre külön figyelni kell.
+
+**Mentés (ajánlott, pl. napi cron):**
+
+```bash
+# adatbázis
+docker compose exec -T postgres pg_dump -U octopus octopus > backup-$(date +%F).sql
+# feltöltött fájlok
+tar czf files-$(date +%F).tar.gz storage/app/documents
+```
+
+**Éles .env beállítások:** `APP_ENV=production`, `APP_DEBUG=false`, erős
+`OCTOPUS_ADMIN_PASSWORD` az első indítás ELŐTT, valamint `APP_URL` a valós
+domainre állítva.
+
 ## Verziópolitika / biztonság
 
 A Laravel **11-es széria kifutott a biztonsági támogatásból**: a CVE-2026-48019
@@ -161,9 +191,9 @@ Agent integráció szándékosan a legutolsó lépés.
 | # | Modul | Állapot |
 |---|-------|---------|
 | — | Alap (Docker, Laravel, design rendszer, auth, jogosultság) | ✅ kész |
-| 1 | Vezérlőpult | ⬜ |
+| 1 | Vezérlőpult (valós adatokkal) | ✅ kész |
 | 2 | Projektek / Munkák | ✅ kész |
-| 3 | Ütemezés / Naptár | ⬜ |
+| 3 | Ütemezés / Naptár (rétegek, ütközés-jelzés; iCloud-szinkron később) | ✅ kész |
 | 4 | Ügyfelek és partnerek (CRM) | ⬜ |
 | 5 | Alvállalkozók | ⬜ |
 | 6 | Munkatársak / Erőforrások | ⬜ |

@@ -26,6 +26,7 @@ Route::get('/', function () {
 require __DIR__.'/dashboard.php';
 require __DIR__.'/profile.php';
 require __DIR__.'/projects.php';
+require __DIR__.'/scheduling.php';
 require __DIR__.'/documents.php';
 require __DIR__.'/tasks.php';
 

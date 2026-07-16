@@ -89,6 +89,7 @@ class Modules
         return [
             'dashboard',
             'projects',
+            'scheduling',
             'documents',
             'tasks',
         ];

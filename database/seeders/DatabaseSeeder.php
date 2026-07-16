@@ -10,45 +10,44 @@ use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
+/**
+ * Idempotens alap-seeder — minden konténer-indításkor lefut (migrate --seed).
+ *
+ * ÉLES-BIZTONSÁG: meglévő adatot soha nem ír felül.
+ *  - A jogosultság-neveket csak LÉTREHOZZA, ha hiányoznak (új modulok jogai).
+ *  - A szerep-sablonokat csak akkor hozza létre, ha a szerep még nem létezik —
+ *    a később (16. modul) testre szabott szerep-jogokat nem állítja vissza.
+ *  - Kivétel az IT Admin: ő mindig minden jogot megkap (az új modulokét is).
+ *  - Az admin felhasználót csak akkor hozza létre, ha még nincs; jelszavát,
+ *    adatait meglévő fióknál nem módosítja.
+ */
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        // 1) Permissions: view/create/edit/delete for every module.
+        // 1) Jogosultságok: view/create/edit/delete minden modulhoz (csak pótlás).
         foreach (Modules::permissionNames() as $name) {
             Permission::findOrCreate($name, 'web');
         }
 
-        // 2) Roles as convenient starting templates (spec §16 – per-user
-        //    fine-tuning still overrides these).
+        // 2) IT Admin: mindig létezik és mindig mindenre jogosult.
         $itAdmin = Role::findOrCreate('IT Admin', 'web');
-        $projektvezeto = Role::findOrCreate('Projektvezető', 'web');
-        $csoportvezeto = Role::findOrCreate('Csoportvezető', 'web');
-        $alvallalkozo = Role::findOrCreate('Alvállalkozó', 'web');
-        $megrendelo = Role::findOrCreate('Megrendelő', 'web');
-
-        // IT Admin implicitly gets everything via Gate::before, but we also grant
-        // all permissions so role-based checks resolve too.
         $itAdmin->syncPermissions(Permission::all());
 
-        // Projektvezető: sees & manages everything except user administration.
-        $projektvezeto->syncPermissions(
-            collect(Modules::permissionNames())
-                ->reject(fn ($p) => str_starts_with($p, 'users.') && $p !== 'users.view')
-                ->all()
-        );
+        // 3) Szerep-sablonok — CSAK első létrehozáskor kapják meg a sablon-jogokat.
+        $this->createRoleIfMissing('Projektvezető', collect(Modules::permissionNames())
+            ->reject(fn ($p) => str_starts_with($p, 'users.') && $p !== 'users.view')
+            ->all());
 
-        // Csoportvezető: view most modules, actively works in field modules.
-        $csoportvezeto->syncPermissions(array_merge(
+        $this->createRoleIfMissing('Csoportvezető', array_merge(
             $this->viewOnly(['dashboard', 'projects', 'scheduling', 'crm', 'subcontractors', 'staff', 'machines', 'materials', 'finance', 'documents', 'reports']),
             $this->crud(['daily-reports', 'tasks', 'qa']),
             ['communication.view', 'communication.create', 'documents.create'],
         ));
 
-        // Alvállalkozó: minimal internal footprint.
-        $alvallalkozo->syncPermissions([
+        $this->createRoleIfMissing('Alvállalkozó', [
             'dashboard.view',
             'daily-reports.view', 'daily-reports.create',
             'tasks.view',
@@ -56,11 +55,11 @@ class DatabaseSeeder extends Seeder
             'communication.view', 'communication.create',
         ]);
 
-        // Megrendelő (external portal): no module permissions – access is granted
-        // per shared item only (handled by the portal in Module 16).
-        $megrendelo->syncPermissions([]);
+        // Megrendelő (külső portál): jog nélkül — csak a kifejezetten megosztott
+        // tartalmat éri majd el (16. modul).
+        $this->createRoleIfMissing('Megrendelő', []);
 
-        // 3) Seed the initial IT Admin user.
+        // 4) Kezdő admin felhasználó — csak ha még nem létezik.
         $admin = User::firstOrCreate(
             ['email' => env('OCTOPUS_ADMIN_EMAIL', 'admin@octopus.local')],
             [
@@ -72,7 +71,23 @@ class DatabaseSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
-        $admin->syncRoles([$itAdmin]);
+
+        if (! $admin->hasRole('IT Admin')) {
+            $admin->assignRole($itAdmin);
+        }
+    }
+
+    /**
+     * @param  array<int, string>  $permissions
+     */
+    private function createRoleIfMissing(string $name, array $permissions): void
+    {
+        if (Role::where('name', $name)->where('guard_name', 'web')->exists()) {
+            return;
+        }
+
+        Role::create(['name' => $name, 'guard_name' => 'web'])
+            ->syncPermissions($permissions);
     }
 
     /**

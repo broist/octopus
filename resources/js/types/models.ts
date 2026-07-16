@@ -150,6 +150,50 @@ export interface ProjectOption {
     label: string;
 }
 
+export interface ProjectRef {
+    id: number;
+    code: string;
+    name: string;
+}
+
+export type CalendarEventType = 'beosztas' | 'szallitas' | 'esemeny' | 'szemelyes';
+
+export interface CalendarEventItem {
+    id: number;
+    title: string;
+    type: CalendarEventType;
+    project: ProjectRef | null;
+    starts_on: string;
+    ends_on: string;
+    start_time: string | null;
+    end_time: string | null;
+    location: string | null;
+    note: string | null;
+    assignees: Option[];
+    creator_name: string | null;
+    can_manage: boolean;
+    is_conflicted: boolean;
+}
+
+export interface MilestoneItem {
+    key: string;
+    date: string;
+    label: string;
+    kind: 'fazis' | 'atadas';
+    done: boolean;
+    project: ProjectRef | null;
+}
+
+export interface TaskDueItem {
+    key: string;
+    id: number;
+    date: string;
+    label: string;
+    done: boolean;
+    overdue: boolean;
+    project: ProjectRef | null;
+}
+
 export interface ProjectDetail {
     id: number;
     code: string;

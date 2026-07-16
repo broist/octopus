@@ -36,7 +36,7 @@ class DocumentVersionController extends Controller
         ]);
 
         $file = $request->file('file');
-        $disk = Document::diskForCategory($document->category);
+        $disk = Document::diskFor($document->category, (int) $file->getSize());
 
         DB::transaction(function () use ($document, $file, $disk, $data, $request) {
             $next = ((int) $document->versions()->max('version_number')) + 1;

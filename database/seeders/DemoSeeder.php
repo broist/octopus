@@ -296,7 +296,7 @@ class DemoSeeder extends Seeder
 
         $create = function (array $meta, string $filename, string $content) use ($admin) {
             $document = Document::create([...$meta, 'uploaded_by' => $admin?->id]);
-            $disk = Document::diskForCategory($document->category);
+            $disk = Document::diskFor($document->category);
             $path = "doc-{$document->id}/".uniqid().'.png';
             Storage::disk($disk)->put($path, $content);
 

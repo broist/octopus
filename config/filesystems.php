@@ -39,6 +39,8 @@ return [
         ],
 
         // Octopus: large plan/drawing files on S3-compatible storage (presigned URLs).
+        // When configured (key set), 'terv' + 'foto' categories and any upload
+        // above min_upload_mb are routed here automatically.
         'plans' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
@@ -47,6 +49,7 @@ return [
             'bucket' => env('AWS_BUCKET', 'octopus-plans'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'min_upload_mb' => env('PLANS_S3_MIN_MB', 25),
             'throw' => false,
             'visibility' => 'private',
         ],
