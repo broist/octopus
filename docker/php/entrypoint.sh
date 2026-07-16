@@ -27,9 +27,11 @@ if ! grep -q "^APP_KEY=base64:" .env; then
   php artisan key:generate --force
 fi
 
-# Ensure writable storage/cache dirs.
+# Ensure writable storage/cache dirs. a+rwX (X = dirs only) is needed because
+# one-off exec'd commands (migrate/seed) run as root while PHP-FPM runs as
+# www-data — root-created files must stay readable for FPM.
 mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
-chmod -R ug+rw storage bootstrap/cache || true
+chmod -R a+rwX storage bootstrap/cache || true
 
 echo "[octopus] Running database migrations..."
 php artisan migrate --force --seed || php artisan migrate --force

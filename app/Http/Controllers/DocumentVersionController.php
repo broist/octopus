@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\DocumentRequest;
 use App\Models\Document;
 use App\Models\DocumentVersion;
+use App\Models\Folder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,9 @@ class DocumentVersionController extends Controller
      */
     public function store(Request $request, Document $document): RedirectResponse
     {
+        abort_unless($document->isVisibleTo($request->user()), 404);
+        abort_unless(Folder::canEditIn($request->user(), $document->folder), 403);
+
         $data = $request->validate([
             'file' => [
                 'required', 'file',
@@ -64,8 +68,11 @@ class DocumentVersionController extends Controller
     /**
      * Régebbi verzió visszaállítása aktuálissá.
      */
-    public function makeCurrent(DocumentVersion $version): RedirectResponse
+    public function makeCurrent(Request $request, DocumentVersion $version): RedirectResponse
     {
+        abort_unless($version->document->isVisibleTo($request->user()), 404);
+        abort_unless(Folder::canEditIn($request->user(), $version->document->folder), 403);
+
         DB::transaction(function () use ($version) {
             $version->document->versions()->update(['is_current' => false]);
             $version->update(['is_current' => true]);
@@ -78,16 +85,19 @@ class DocumentVersionController extends Controller
     /**
      * Letöltés — a tárolás helye (szerver vagy S3) a felhasználó felé átlátszó.
      */
-    public function download(DocumentVersion $version): SymfonyResponse
+    public function download(Request $request, DocumentVersion $version): SymfonyResponse
     {
+        abort_unless($version->document->isVisibleTo($request->user()), 404);
+
         return $this->serve($version, inline: false);
     }
 
     /**
      * Előnézet (kép/PDF beágyazva).
      */
-    public function preview(DocumentVersion $version): SymfonyResponse
+    public function preview(Request $request, DocumentVersion $version): SymfonyResponse
     {
+        abort_unless($version->document->isVisibleTo($request->user()), 404);
         abort_unless($version->isPreviewable(), 404);
 
         return $this->serve($version, inline: true);

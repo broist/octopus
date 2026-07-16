@@ -25,6 +25,8 @@ interface ShowProps extends Record<string, unknown> {
         title: string;
         category: string;
         description: string | null;
+        folder_id: number | null;
+        folder_path: string;
         project: { id: number; code: string; name: string } | null;
         partner: { id: number; name: string } | null;
         project_id: number | null;
@@ -101,11 +103,14 @@ export default function Show() {
 
             <div className="mb-6">
                 <Link
-                    href={route('documents.index')}
+                    href={route(
+                        'documents.index',
+                        doc.folder_id ? { folder: doc.folder_id } : {},
+                    )}
                     className="mb-2 inline-flex items-center gap-1 text-sm text-ink-soft hover:text-ink"
                 >
                     <ArrowLeft size={15} />
-                    Vissza a Fájlkezelőhöz
+                    {doc.folder_path}
                 </Link>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

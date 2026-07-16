@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Document;
+use App\Models\Folder;
 use App\Models\Partner;
 use App\Models\Project;
 use App\Models\Task;
@@ -25,6 +26,29 @@ class DemoSeeder extends Seeder
         $this->seedProjects();
         $this->seedTasks();
         $this->seedDocuments();
+        $this->seedFolders();
+    }
+
+    private function seedFolders(): void
+    {
+        if (Folder::withTrashed()->exists()) {
+            $this->command?->warn('Már vannak mappák – a mappa-demó kimarad.');
+
+            return;
+        }
+
+        $admin = User::where('email', 'admin@octopus.local')->first();
+
+        $tervek = Folder::create(['name' => 'Tervek', 'created_by' => $admin?->id]);
+        $fotok = Folder::create(['name' => 'Fotók', 'created_by' => $admin?->id]);
+        Folder::create(['name' => 'Szerződések', 'created_by' => $admin?->id]);
+        Folder::create(['name' => 'P-2026-001 Családi ház', 'parent_id' => $tervek->id, 'created_by' => $admin?->id]);
+
+        // A demó-fájlokat a megfelelő mappákba rendezzük.
+        Document::where('category', 'terv')->update(['folder_id' => $tervek->id]);
+        Document::where('category', 'foto')->update(['folder_id' => $fotok->id]);
+
+        $this->command?->info('Mappa-demó betöltve: Tervek (+almappa), Fotók, Szerződések.');
     }
 
     private function seedProjects(): void

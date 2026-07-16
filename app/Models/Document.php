@@ -26,6 +26,7 @@ class Document extends Model
     protected $fillable = [
         'title',
         'category',
+        'folder_id',
         'project_id',
         'partner_id',
         'description',
@@ -40,6 +41,11 @@ class Document extends Model
     public function currentVersion(): HasOne
     {
         return $this->hasOne(DocumentVersion::class)->where('is_current', true);
+    }
+
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(Folder::class);
     }
 
     public function project(): BelongsTo
@@ -67,5 +73,35 @@ class Document extends Model
         $s3Configured = (bool) config('filesystems.disks.plans.key');
 
         return ($category === 'terv' && $s3Configured) ? 'plans' : 'documents';
+    }
+
+    /**
+     * Látja-e a felhasználó (a mappa-korlátozások figyelembevételével).
+     */
+    public function isVisibleTo(User $user): bool
+    {
+        if ($this->folder_id === null) {
+            return true;
+        }
+
+        $map = Folder::accessMapFor($user);
+
+        // A null érvényes érték (nincs korlátozás) — ?? itt hibás lenne.
+        if (! array_key_exists($this->folder_id, $map)) {
+            return false;
+        }
+
+        return $map[$this->folder_id] !== false;
+    }
+
+    /**
+     * Szűkítés a felhasználó által látható dokumentumokra.
+     */
+    public function scopeVisibleTo($query, User $user)
+    {
+        return $query->where(function ($q) use ($user) {
+            $q->whereNull('folder_id')
+                ->orWhereIn('folder_id', Folder::visibleIdsFor($user));
+        });
     }
 }

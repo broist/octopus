@@ -170,7 +170,7 @@ Agent integráció szándékosan a legutolsó lépés.
 | 7 | Gépek és eszközök | ⬜ |
 | 8 | Anyagok / Készlet | ⬜ |
 | 9 | Pénzügy / Költségvetés | ⬜ |
-| 10 | Fájlkezelő (Dokumentumtár) – a fő menüben | ✅ kész |
+| 10 | Fájlkezelő (Dokumentumtár) – Explorer-nézet, mappák, ACL, mobil kamera/galéria | ✅ kész |
 | 11 | Napi jelentés / Munkanapló | ⬜ |
 | 12 | Minőségbiztosítás / Munkavédelem | ⬜ |
 | 13 | Feladatok / To-do – a fő menüben | ✅ kész |

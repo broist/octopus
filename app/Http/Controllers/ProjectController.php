@@ -115,7 +115,7 @@ class ProjectController extends Controller
             ->with('success', 'A projekt sikeresen létrejött.');
     }
 
-    public function show(Project $project): Response
+    public function show(Request $request, Project $project): Response
     {
         $project->load([
             'client:id,name',
@@ -130,7 +130,9 @@ class ProjectController extends Controller
                         ->whereDate('due_on', '<', today());
                 }]),
             'activities' => fn ($q) => $q->with('user:id,name')->limit(30),
-            'documents' => fn ($q) => $q->with(['currentVersion', 'uploader:id,name']),
+            // Csak a felhasználó számára látható (mappa-ACL) dokumentumok.
+            'documents' => fn ($q) => $q->visibleTo($request->user())
+                ->with(['currentVersion', 'uploader:id,name']),
         ]);
 
         return Inertia::render('Projects/Show', [

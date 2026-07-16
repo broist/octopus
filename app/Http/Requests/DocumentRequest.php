@@ -19,26 +19,19 @@ class DocumentRequest extends FormRequest
         return true; // route middleware handles the permission check
     }
 
+    /**
+     * Meta-adatok szerkesztése (a feltöltést a DocumentController@store
+     * validálja, több fájllal).
+     */
     public function rules(): array
     {
-        $rules = [
+        return [
             'title' => ['required', 'string', 'max:200'],
             'category' => ['required', Rule::in(array_keys(Document::CATEGORIES))],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
             'partner_id' => ['nullable', 'integer', 'exists:partners,id'],
             'description' => ['nullable', 'string', 'max:2000'],
         ];
-
-        // Új dokumentumnál kötelező a fájl; meta-szerkesztésnél nincs fájl.
-        if ($this->isMethod('post')) {
-            $rules['file'] = [
-                'required', 'file',
-                'max:'.self::MAX_KB,
-                'extensions:'.self::EXTENSIONS,
-            ];
-        }
-
-        return $rules;
     }
 
     public function messages(): array
@@ -47,9 +40,6 @@ class DocumentRequest extends FormRequest
             'title.required' => 'A dokumentum megnevezése kötelező.',
             'category.required' => 'A kategória kiválasztása kötelező.',
             'category.in' => 'Érvénytelen kategória.',
-            'file.required' => 'Válasszon ki egy fájlt a feltöltéshez.',
-            'file.max' => 'A fájl túl nagy (legfeljebb 120 MB lehet).',
-            'file.extensions' => 'Ez a fájltípus nem engedélyezett.',
         ];
     }
 }

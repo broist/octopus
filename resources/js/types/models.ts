@@ -59,19 +59,48 @@ export interface ActivityItem {
     created_at: string;
 }
 
-export interface DocumentRow {
+export interface FolderCrumb {
+    id: number | null;
+    name: string;
+}
+
+export interface TreeFolder {
+    id: number;
+    name: string;
+    parent_id: number | null;
+    is_restricted: boolean;
+    can_edit: boolean;
+}
+
+export interface AclEntry {
+    user_id: number;
+    access: 'view' | 'edit';
+}
+
+export interface ExplorerFolderRow {
+    id: number;
+    name: string;
+    is_restricted: boolean;
+    items_count: number;
+    updated_at: string;
+    acl: AclEntry[];
+    can_manage_permissions: boolean;
+}
+
+export interface ExplorerFileRow {
     id: number;
     title: string;
     category: string;
-    project: { id: number; code: string } | null;
-    partner_name: string | null;
-    uploader_name: string | null;
-    updated_at: string;
-    version_number: number;
     original_filename: string | null;
     mime_type: string | null;
     size_bytes: number;
+    version_number: number;
+    updated_at: string;
     download_version_id: number | null;
+    preview_version_id: number | null;
+    is_image: boolean;
+    project_code: string | null;
+    location: string | null;
 }
 
 export interface DocumentVersionRow {
