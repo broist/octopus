@@ -162,7 +162,7 @@ Agent integráció szándékosan a legutolsó lépés.
 |---|-------|---------|
 | — | Alap (Docker, Laravel, design rendszer, auth, jogosultság) | ✅ kész |
 | 1 | Vezérlőpult | ⬜ |
-| 2 | Projektek / Munkák | ⬜ |
+| 2 | Projektek / Munkák | ✅ kész |
 | 3 | Ütemezés / Naptár | ⬜ |
 | 4 | Ügyfelek és partnerek (CRM) | ⬜ |
 | 5 | Alvállalkozók | ⬜ |
@@ -170,10 +170,10 @@ Agent integráció szándékosan a legutolsó lépés.
 | 7 | Gépek és eszközök | ⬜ |
 | 8 | Anyagok / Készlet | ⬜ |
 | 9 | Pénzügy / Költségvetés | ⬜ |
-| 10 | Dokumentumtár | ⬜ |
+| 10 | Fájlkezelő (Dokumentumtár) – a fő menüben | ✅ kész |
 | 11 | Napi jelentés / Munkanapló | ⬜ |
 | 12 | Minőségbiztosítás / Munkavédelem | ⬜ |
-| 13 | Feladatok / To-do | ⬜ |
+| 13 | Feladatok / To-do – a fő menüben | ✅ kész |
 | 14 | Kommunikáció | ⬜ |
 | 15 | Riportok / Statisztikák | ⬜ |
 | 16 | Felhasználók / Jogosultságok | ⬜ |

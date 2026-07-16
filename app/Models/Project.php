@@ -106,6 +106,16 @@ class Project extends Model
         return $this->hasMany(ProjectActivity::class)->latest();
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class)->latest('updated_at');
+    }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
+    }
+
     /* ------------------------------------------------------------------ */
     /* Helpers                                                             */
     /* ------------------------------------------------------------------ */

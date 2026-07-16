@@ -18,11 +18,13 @@ import ProgressBar from '@/Components/ProgressBar';
 import PhasesPanel from '@/Pages/Projects/Partials/PhasesPanel';
 import Gantt from '@/Pages/Projects/Partials/Gantt';
 import { usePageProps } from '@/hooks/usePageProps';
-import { fmtDate, fmtDateTime } from '@/lib/format';
+import { fmtBytes, fmtDate, fmtDateTime } from '@/lib/format';
+import { CATEGORY_LABELS, fileIcon } from '@/lib/documents';
 import type {
     ActivityItem,
     PhaseItem,
     ProjectDetail,
+    ProjectDocumentRow,
     SubprojectItem,
 } from '@/types/models';
 
@@ -31,6 +33,7 @@ interface ShowProps extends Record<string, unknown> {
     phases: PhaseItem[];
     subprojects: SubprojectItem[];
     activities: ActivityItem[];
+    documents: ProjectDocumentRow[];
     types: Record<string, string>;
 }
 
@@ -75,7 +78,7 @@ function ComingSoon({ title, note }: { title: string; note: string }) {
 }
 
 export default function Show() {
-    const { project, phases, subprojects, activities, types, auth } =
+    const { project, phases, subprojects, activities, documents, types, auth } =
         usePageProps<ShowProps>();
     const [tab, setTab] = useState<Tab>('attekintes');
 
@@ -334,10 +337,73 @@ export default function Show() {
             )}
 
             {tab === 'dokumentumok' && (
-                <ComingSoon
-                    title="Kapcsolódó dokumentumok"
-                    note="Tervrajzok, engedélyek, szerződések és helyszíni fotók — a Dokumentumtár (10.) modul elkészültével lesznek itt elérhetők, verziókövetéssel."
-                />
+                <section className="o-card">
+                    <header className="flex items-center justify-between px-4 py-3">
+                        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">
+                            Kapcsolódó dokumentumok
+                        </h2>
+                        <Link
+                            href={route('documents.index', { project: project.id })}
+                            className="btn-ghost px-3 py-1.5 text-xs"
+                        >
+                            Megnyitás a Fájlkezelőben
+                        </Link>
+                    </header>
+
+                    {documents.length === 0 ? (
+                        <div className="border-t border-line px-4 py-10 text-center text-sm text-ink-faint">
+                            Ehhez a projekthez még nincs feltöltött dokumentum. A Fájlkezelőben
+                            tölthet fel fájlt, és kötheti ehhez a projekthez.
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-line border-t border-line">
+                            {documents.map((d) => {
+                                const Icon = fileIcon(null, d.original_filename);
+                                return (
+                                    <div key={d.id} className="flex items-center gap-3 px-4 py-3">
+                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-50 text-accent">
+                                            <Icon size={18} />
+                                        </span>
+                                        <Link
+                                            href={route('documents.show', d.id)}
+                                            className="min-w-0 flex-1"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <span className="truncate text-sm font-medium text-ink hover:text-accent-700">
+                                                    {d.title}
+                                                </span>
+                                                <span className="chip chip-grey shrink-0">
+                                                    {CATEGORY_LABELS[d.category] ?? d.category}
+                                                </span>
+                                                {d.version_number > 1 && (
+                                                    <span className="shrink-0 font-mono text-xs text-ink-faint">
+                                                        v{d.version_number}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="mt-0.5 truncate text-xs text-ink-faint">
+                                                {d.original_filename} · {fmtBytes(d.size_bytes)} ·{' '}
+                                                {fmtDate(d.updated_at)}
+                                                {d.uploader_name && ` · ${d.uploader_name}`}
+                                            </div>
+                                        </Link>
+                                        {d.download_version_id && (
+                                            <a
+                                                href={route(
+                                                    'documents.versions.download',
+                                                    d.download_version_id,
+                                                )}
+                                                className="shrink-0 text-xs font-medium text-accent hover:text-accent-700"
+                                            >
+                                                Letöltés
+                                            </a>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
             )}
 
             {tab === 'naplo' && (

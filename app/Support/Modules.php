@@ -23,16 +23,18 @@ class Modules
             ['key' => 'dashboard',      'label' => 'Vezérlőpult',                 'route' => 'dashboard',      'icon' => 'LayoutDashboard', 'group' => 'main'],
             ['key' => 'projects',       'label' => 'Projektek / Munkák',          'route' => 'projects.index', 'icon' => 'FolderKanban',    'group' => 'main'],
             ['key' => 'scheduling',     'label' => 'Ütemezés / Naptár',           'route' => 'scheduling.index', 'icon' => 'CalendarDays',  'group' => 'main'],
+            // A Fájlkezelő (Dokumentumtár) és a Feladatok a fő csoportba kerültek
+            // (megrendelői kérés). A kulcsok — és így a jogosultságnevek — változatlanok.
+            ['key' => 'documents',      'label' => 'Fájlkezelő',                  'route' => 'documents.index', 'icon' => 'FolderOpen',     'group' => 'main'],
+            ['key' => 'tasks',          'label' => 'Feladatok / To-do',           'route' => 'tasks.index',    'icon' => 'ListChecks',      'group' => 'main'],
             ['key' => 'crm',            'label' => 'Ügyfelek és partnerek',       'route' => 'crm.index',      'icon' => 'Handshake',       'group' => 'partners'],
             ['key' => 'subcontractors', 'label' => 'Alvállalkozók',               'route' => 'subcontractors.index', 'icon' => 'HardHat',   'group' => 'partners'],
             ['key' => 'staff',          'label' => 'Munkatársak / Erőforrások',   'route' => 'staff.index',    'icon' => 'Users',           'group' => 'resources'],
             ['key' => 'machines',       'label' => 'Gépek és eszközök',           'route' => 'machines.index', 'icon' => 'Truck',           'group' => 'resources'],
             ['key' => 'materials',      'label' => 'Anyagok / Készlet',           'route' => 'materials.index', 'icon' => 'Package',        'group' => 'resources'],
             ['key' => 'finance',        'label' => 'Pénzügy / Költségvetés',      'route' => 'finance.index',  'icon' => 'Wallet',          'group' => 'operations'],
-            ['key' => 'documents',      'label' => 'Dokumentumtár',               'route' => 'documents.index', 'icon' => 'FileText',       'group' => 'operations'],
             ['key' => 'daily-reports',  'label' => 'Napi jelentés / Munkanapló',  'route' => 'daily-reports.index', 'icon' => 'ClipboardList', 'group' => 'operations'],
             ['key' => 'qa',             'label' => 'Minőség / Munkavédelem',      'route' => 'qa.index',       'icon' => 'ShieldCheck',     'group' => 'operations'],
-            ['key' => 'tasks',          'label' => 'Feladatok / To-do',           'route' => 'tasks.index',    'icon' => 'ListChecks',      'group' => 'operations'],
             ['key' => 'communication',  'label' => 'Kommunikáció',                'route' => 'communication.index', 'icon' => 'MessageSquare', 'group' => 'operations'],
             ['key' => 'reports',        'label' => 'Riportok / Statisztikák',     'route' => 'reports.index',  'icon' => 'BarChart3',       'group' => 'insights'],
             ['key' => 'users',          'label' => 'Felhasználók / Jogosultságok', 'route' => 'users.index',   'icon' => 'UserCog',         'group' => 'admin'],
@@ -87,6 +89,8 @@ class Modules
         return [
             'dashboard',
             'projects',
+            'documents',
+            'tasks',
         ];
     }
 }

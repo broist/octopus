@@ -130,6 +130,7 @@ class ProjectController extends Controller
                         ->whereDate('due_on', '<', today());
                 }]),
             'activities' => fn ($q) => $q->with('user:id,name')->limit(30),
+            'documents' => fn ($q) => $q->with(['currentVersion', 'uploader:id,name']),
         ]);
 
         return Inertia::render('Projects/Show', [
@@ -177,6 +178,17 @@ class ProjectController extends Controller
                 'description' => $a->description,
                 'user_name' => $a->user?->name,
                 'created_at' => $a->created_at->toIso8601String(),
+            ])->values(),
+            'documents' => $project->documents->map(fn ($d) => [
+                'id' => $d->id,
+                'title' => $d->title,
+                'category' => $d->category,
+                'version_number' => $d->currentVersion?->version_number ?? 0,
+                'original_filename' => $d->currentVersion?->original_filename,
+                'size_bytes' => $d->currentVersion?->size_bytes ?? 0,
+                'download_version_id' => $d->currentVersion?->id,
+                'uploader_name' => $d->uploader?->name,
+                'updated_at' => $d->updated_at->toIso8601String(),
             ])->values(),
             'statuses' => Project::STATUSES,
             'types' => Project::CONSTRUCTION_TYPES,

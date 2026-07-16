@@ -59,6 +59,68 @@ export interface ActivityItem {
     created_at: string;
 }
 
+export interface DocumentRow {
+    id: number;
+    title: string;
+    category: string;
+    project: { id: number; code: string } | null;
+    partner_name: string | null;
+    uploader_name: string | null;
+    updated_at: string;
+    version_number: number;
+    original_filename: string | null;
+    mime_type: string | null;
+    size_bytes: number;
+    download_version_id: number | null;
+}
+
+export interface DocumentVersionRow {
+    id: number;
+    version_number: number;
+    is_current: boolean;
+    original_filename: string;
+    mime_type: string | null;
+    size_bytes: number;
+    note: string | null;
+    uploader_name: string | null;
+    created_at: string;
+    stored_in_cloud: boolean;
+}
+
+export interface ProjectDocumentRow {
+    id: number;
+    title: string;
+    category: string;
+    version_number: number;
+    original_filename: string | null;
+    size_bytes: number;
+    download_version_id: number | null;
+    uploader_name: string | null;
+    updated_at: string;
+}
+
+export type TaskStatus = 'teendo' | 'folyamatban' | 'kesz';
+export type TaskPriority = 'alacsony' | 'kozepes' | 'magas';
+
+export interface TaskItem {
+    id: number;
+    title: string;
+    description: string | null;
+    status: TaskStatus;
+    priority: TaskPriority;
+    due_on: string | null;
+    is_overdue: boolean;
+    project: { id: number; code: string; name: string } | null;
+    assignees: Option[];
+    can_move: boolean;
+    completed_at: string | null;
+}
+
+export interface ProjectOption {
+    id: number;
+    label: string;
+}
+
 export interface ProjectDetail {
     id: number;
     code: string;

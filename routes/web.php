@@ -26,6 +26,8 @@ Route::get('/', function () {
 require __DIR__.'/dashboard.php';
 require __DIR__.'/profile.php';
 require __DIR__.'/projects.php';
+require __DIR__.'/documents.php';
+require __DIR__.'/tasks.php';
 
 // Placeholder routes for not-yet-implemented modules (keeps the sidebar whole).
 require __DIR__.'/modules.php';

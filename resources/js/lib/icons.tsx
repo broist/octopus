@@ -1,6 +1,7 @@
 import {
     LayoutDashboard,
     FolderKanban,
+    FolderOpen,
     CalendarDays,
     Handshake,
     HardHat,
@@ -25,6 +26,7 @@ import {
 const iconMap: Record<string, LucideIcon> = {
     LayoutDashboard,
     FolderKanban,
+    FolderOpen,
     CalendarDays,
     Handshake,
     HardHat,

@@ -2,28 +2,40 @@
 
 namespace Database\Seeders;
 
+use App\Models\Document;
 use App\Models\Partner;
 use App\Models\Project;
+use App\Models\Task;
+use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Demó adatok kiértékeléshez — CSAK kézzel futtatandó:
  *
  *   php artisan db:seed --class=DemoSeeder
  *
- * Nem fut le az alap seedeléskor; és ha már van projekt, nem csinál semmit.
+ * Nem fut le az alap seedeléskor. Minden szakasz külön őrfeltétellel fut,
+ * így többször is futtatható: csak a hiányzó demó-adatokat pótolja.
  */
 class DemoSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->seedProjects();
+        $this->seedTasks();
+        $this->seedDocuments();
+    }
+
+    private function seedProjects(): void
+    {
         if (Project::withTrashed()->exists()) {
-            $this->command?->warn('Már vannak projektek – a demó seedelés kimarad.');
+            $this->command?->warn('Már vannak projektek – a projekt-demó kimarad.');
 
             return;
         }
 
-        $admin = \App\Models\User::where('email', 'admin@octopus.local')->first();
+        $admin = User::where('email', 'admin@octopus.local')->first();
 
         // --- Megrendelők ---
         $kovacs = Partner::create([
@@ -168,6 +180,135 @@ class DemoSeeder extends Seeder
         ]);
         $csarnok->logActivity('letrehozva', 'Projekt létrehozva: Raktárcsarnok bővítése', $admin);
 
-        $this->command?->info('Demó adatok betöltve: 3 projekt, 2 alprojekt, fázisok és napló.');
+        $this->command?->info('Projekt-demó betöltve: 3 projekt, 2 alprojekt, fázisok és napló.');
+    }
+
+    private function seedTasks(): void
+    {
+        if (Task::exists()) {
+            $this->command?->warn('Már vannak feladatok – a feladat-demó kimarad.');
+
+            return;
+        }
+
+        $admin = User::where('email', 'admin@octopus.local')->first();
+        $haz = Project::where('code', 'P-2026-001')->first();
+        $iroda = Project::where('code', 'P-2026-002')->first();
+        $csarnok = Project::where('code', 'P-2026-003')->first();
+
+        $make = function (array $attrs) use ($admin) {
+            $task = Task::create([...$attrs, 'created_by' => $admin?->id]);
+            if ($admin) {
+                $task->assignees()->sync([$admin->id]);
+            }
+
+            return $task;
+        };
+
+        $make([
+            'title' => 'Építési engedély másolatának feltöltése',
+            'description' => 'A jogerős engedélyt be kell szkennelni és a Fájlkezelőbe feltölteni, a projekthez kötve.',
+            'project_id' => $csarnok?->id,
+            'status' => 'teendo',
+            'priority' => 'magas',
+            'due_on' => today()->addDay(),
+        ]);
+
+        $make([
+            'title' => 'Villanyszerelő alvállalkozói ajánlatok bekérése',
+            'description' => 'Legalább három ajánlat a B szárny villamos munkáira.',
+            'project_id' => $iroda?->id,
+            'status' => 'folyamatban',
+            'priority' => 'kozepes',
+            'due_on' => today()->addDays(3),
+        ]);
+
+        $make([
+            'title' => 'Heti fotódokumentáció a helyszínről',
+            'project_id' => $haz?->id,
+            'status' => 'teendo',
+            'priority' => 'alacsony',
+            'due_on' => today()->subDay(), // szándékosan lejárt
+        ]);
+
+        $make([
+            'title' => 'Kivitelezési szerződés aláíratása',
+            'project_id' => $haz?->id,
+            'status' => 'kesz',
+            'priority' => 'magas',
+            'due_on' => today()->subDays(10),
+            'completed_at' => now()->subDays(9),
+        ]);
+
+        $this->command?->info('Feladat-demó betöltve: 4 feladat (köztük egy lejárt és egy kész).');
+    }
+
+    private function seedDocuments(): void
+    {
+        if (Document::withTrashed()->exists()) {
+            $this->command?->warn('Már vannak dokumentumok – a dokumentum-demó kimarad.');
+
+            return;
+        }
+
+        $admin = User::where('email', 'admin@octopus.local')->first();
+        $haz = Project::where('code', 'P-2026-001')->first();
+
+        // Kis PNG-ket generálunk GD-vel, hogy a letöltés/előnézet valóban működjön.
+        $png = function (string $text, int $w = 640, int $h = 420): string {
+            $im = imagecreatetruecolor($w, $h);
+            $bg = imagecolorallocate($im, 246, 243, 236);   // krém
+            $fg = imagecolorallocate($im, 33, 56, 46);      // mély zöld
+            $line = imagecolorallocate($im, 216, 182, 132); // fa tónus
+            imagefill($im, 0, 0, $bg);
+            imagerectangle($im, 10, 10, $w - 11, $h - 11, $line);
+            imagestring($im, 5, 24, 24, 'OCTOPUS DEMO', $fg);
+            imagestring($im, 4, 24, 52, $text, $fg);
+            ob_start();
+            imagepng($im);
+
+            return (string) ob_get_clean();
+        };
+
+        $create = function (array $meta, string $filename, string $content) use ($admin) {
+            $document = Document::create([...$meta, 'uploaded_by' => $admin?->id]);
+            $disk = Document::diskForCategory($document->category);
+            $path = "doc-{$document->id}/".uniqid().'.png';
+            Storage::disk($disk)->put($path, $content);
+
+            $document->versions()->create([
+                'version_number' => 1,
+                'is_current' => true,
+                'disk' => $disk,
+                'file_path' => $path,
+                'original_filename' => $filename,
+                'mime_type' => 'image/png',
+                'size_bytes' => strlen($content),
+                'uploaded_by' => $admin?->id,
+            ]);
+        };
+
+        $create(
+            [
+                'title' => 'Földszinti alaprajz',
+                'category' => 'terv',
+                'project_id' => $haz?->id,
+                'description' => 'Demó tervrajz — élesben ide kerülnek a valódi tervek (S3 konfigurálása után a felhőbe).',
+            ],
+            'alaprajz-fsz-v1.png',
+            $png('Foldszinti alaprajz - demo tervrajz'),
+        );
+
+        $create(
+            [
+                'title' => 'Helyszíni állapotfotó',
+                'category' => 'foto',
+                'project_id' => $haz?->id,
+            ],
+            'helyszini-foto-2026-07.png',
+            $png('Helyszini allapotfoto - demo'),
+        );
+
+        $this->command?->info('Dokumentum-demó betöltve: 2 fájl a P-2026-001 projekthez.');
     }
 }
