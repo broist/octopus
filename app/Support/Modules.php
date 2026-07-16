@@ -92,6 +92,7 @@ class Modules
             'scheduling',
             'documents',
             'tasks',
+            'users',
         ];
     }
 }

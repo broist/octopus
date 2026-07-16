@@ -194,6 +194,20 @@ export interface TaskDueItem {
     project: ProjectRef | null;
 }
 
+export interface ManagedUser {
+    id: number;
+    name: string;
+    email: string;
+    phone: string | null;
+    job_title: string | null;
+    initials: string;
+    is_active: boolean;
+    is_external: boolean;
+    role: string | null;
+    two_factor_enabled: boolean;
+    is_self: boolean;
+}
+
 export interface ProjectDetail {
     id: number;
     code: string;

@@ -20,6 +20,8 @@ Route::get('/', function () {
 
     return Inertia::render('Welcome', [
         'appName' => config('app.name'),
+        'canResetPassword' => Route::has('password.request'),
+        'status' => session('status'),
     ]);
 })->name('home');
 
@@ -29,6 +31,7 @@ require __DIR__.'/projects.php';
 require __DIR__.'/scheduling.php';
 require __DIR__.'/documents.php';
 require __DIR__.'/tasks.php';
+require __DIR__.'/users.php';
 
 // Placeholder routes for not-yet-implemented modules (keeps the sidebar whole).
 require __DIR__.'/modules.php';
