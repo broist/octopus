@@ -299,19 +299,6 @@ class ProjectController extends Controller
 
     private function suggestCode(?string $parentCode): string
     {
-        if ($parentCode) {
-            $siblings = Project::withTrashed()->where('code', 'like', "{$parentCode}-%")->count();
-
-            return sprintf('%s-%d', $parentCode, $siblings + 1);
-        }
-
-        $year = now()->year;
-        $count = Project::withTrashed()->whereYear('created_at', $year)->count();
-
-        do {
-            $code = sprintf('P-%d-%03d', $year, ++$count);
-        } while (Project::withTrashed()->where('code', $code)->exists());
-
-        return $code;
+        return Project::suggestNextCode($parentCode);
     }
 }

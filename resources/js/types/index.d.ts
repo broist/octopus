@@ -39,6 +39,15 @@ export interface NavItem {
     group: string;
 }
 
+export interface NotificationItem {
+    id: string;
+    title: string;
+    body: string;
+    url: string | null;
+    read: boolean;
+    created_at: string;
+}
+
 export interface SharedProps {
     app: {
         name: string;
@@ -51,6 +60,10 @@ export interface SharedProps {
     };
     flash: FlashMessages;
     nav: NavItem[];
+    notifications: {
+        unread: number;
+        items: NotificationItem[];
+    };
 }
 
 export type PageProps<T extends Record<string, unknown> = Record<string, unknown>> =

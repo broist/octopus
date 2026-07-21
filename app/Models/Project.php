@@ -141,6 +141,28 @@ class Project extends Model
     }
 
     /**
+     * Következő szabad projektkód (P-ÉÉÉÉ-NNN, alprojektnél SZÜLŐKÓD-N).
+     * A projektűrlap és az automatikus lead-feldolgozás közös logikája.
+     */
+    public static function suggestNextCode(?string $parentCode = null): string
+    {
+        if ($parentCode) {
+            $siblings = self::withTrashed()->where('code', 'like', "{$parentCode}-%")->count();
+
+            return sprintf('%s-%d', $parentCode, $siblings + 1);
+        }
+
+        $year = now()->year;
+        $count = self::withTrashed()->whereYear('created_at', $year)->count();
+
+        do {
+            $code = sprintf('P-%d-%03d', $year, ++$count);
+        } while (self::withTrashed()->where('code', $code)->exists());
+
+        return $code;
+    }
+
+    /**
      * Bejegyzés a projekt-naplóba (tevékenységfolyam).
      */
     public function logActivity(string $type, string $description, ?User $user = null): void

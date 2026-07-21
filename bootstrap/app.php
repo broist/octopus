@@ -18,6 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        // A lead webhookot külső rendszer (a weboldal űrlapja) hívja —
+        // tokennel hitelesít, CSRF token értelemszerűen nincs.
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/lead',
+        ]);
+
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,

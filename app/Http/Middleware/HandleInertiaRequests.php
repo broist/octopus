@@ -58,10 +58,42 @@ class HandleInertiaRequests extends Middleware
                 'info' => fn () => $request->session()->get('info'),
             ],
             'nav' => fn () => $this->navigation($user),
+            'notifications' => fn () => $this->notifications($user),
             'ziggy' => fn (): array => [
                 ...(new Ziggy)->toArray(),
                 'location' => $request->url(),
             ],
+        ];
+    }
+
+    /**
+     * A fejléc harang ikonjának adatai: olvasatlan darabszám + utolsó 10
+     * értesítés (pl. webes ajánlatkérésből készült projekt).
+     *
+     * @return array{unread: int, items: array<int, array<string, mixed>>}
+     */
+    protected function notifications(?\App\Models\User $user): array
+    {
+        if (! $user) {
+            return ['unread' => 0, 'items' => []];
+        }
+
+        return [
+            'unread' => $user->unreadNotifications()->count(),
+            'items' => $user->notifications()
+                ->latest()
+                ->limit(10)
+                ->get()
+                ->map(fn ($n) => [
+                    'id' => $n->id,
+                    'title' => $n->data['title'] ?? 'Értesítés',
+                    'body' => $n->data['body'] ?? '',
+                    'url' => $n->data['url'] ?? null,
+                    'read' => $n->read_at !== null,
+                    'created_at' => $n->created_at->toIso8601String(),
+                ])
+                ->values()
+                ->all(),
         ];
     }
 

@@ -1,15 +1,110 @@
-import { Link } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import {
     Search,
     Bell,
+    BellOff,
     Plus,
     Menu as MenuIcon,
     LogOut,
+    CheckCheck,
     ChevronDown,
     UserCircle,
 } from 'lucide-react';
+import clsx from 'clsx';
 import { usePageProps } from '@/hooks/usePageProps';
+import { fmtDateTime } from '@/lib/format';
+
+function NotificationsMenu() {
+    const { notifications } = usePageProps();
+    const { unread, items } = notifications;
+
+    const markAllRead = () => {
+        router.post(route('notifications.read'), {}, { preserveScroll: true, preserveState: true });
+    };
+
+    return (
+        <Menu as="div" className="relative">
+            <MenuButton
+                className="relative rounded-lg p-2 text-ink-soft hover:bg-white"
+                aria-label="Értesítések"
+            >
+                <Bell size={19} />
+                {unread > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-coral px-1 text-[10px] font-semibold text-white">
+                        {unread > 9 ? '9+' : unread}
+                    </span>
+                )}
+            </MenuButton>
+
+            <MenuItems className="absolute right-0 mt-2 w-80 origin-top-right rounded-xl border border-line bg-white p-1 shadow-lg focus:outline-none">
+                <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm font-semibold text-ink">Értesítések</span>
+                    {unread > 0 && (
+                        <button
+                            type="button"
+                            onClick={markAllRead}
+                            className="flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-700"
+                        >
+                            <CheckCheck size={13} />
+                            Mind olvasott
+                        </button>
+                    )}
+                </div>
+                <div className="my-1 h-px bg-line" />
+
+                {items.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                        <BellOff size={22} className="text-ink-faint" />
+                        <span className="text-sm text-ink-faint">Nincs értesítés</span>
+                    </div>
+                ) : (
+                    <div className="max-h-96 overflow-y-auto">
+                        {items.map((n) => (
+                            <MenuItem key={n.id}>
+                                {({ focus }) => (
+                                    <Link
+                                        href={n.url ?? '#'}
+                                        className={clsx(
+                                            'block rounded-lg px-3 py-2.5',
+                                            focus && 'bg-cream',
+                                        )}
+                                    >
+                                        <span className="flex items-start gap-2">
+                                            {!n.read && (
+                                                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                                            )}
+                                            <span className="min-w-0">
+                                                <span
+                                                    className={clsx(
+                                                        'block text-sm',
+                                                        n.read
+                                                            ? 'text-ink-soft'
+                                                            : 'font-semibold text-ink',
+                                                    )}
+                                                >
+                                                    {n.title}
+                                                </span>
+                                                {n.body && (
+                                                    <span className="mt-0.5 block truncate text-xs text-ink-soft">
+                                                        {n.body}
+                                                    </span>
+                                                )}
+                                                <span className="mt-0.5 block text-[11px] text-ink-faint">
+                                                    {fmtDateTime(n.created_at)}
+                                                </span>
+                                            </span>
+                                        </span>
+                                    </Link>
+                                )}
+                            </MenuItem>
+                        ))}
+                    </div>
+                )}
+            </MenuItems>
+        </Menu>
+    );
+}
 
 export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
     const { auth } = usePageProps();
@@ -53,14 +148,7 @@ export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void })
                 )}
 
                 {/* Notifications */}
-                <button
-                    type="button"
-                    className="relative rounded-lg p-2 text-ink-soft hover:bg-white"
-                    aria-label="Értesítések"
-                >
-                    <Bell size={19} />
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-coral" />
-                </button>
+                <NotificationsMenu />
 
                 {/* Profile menu */}
                 <Menu as="div" className="relative">
