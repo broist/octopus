@@ -145,6 +145,7 @@ class LeadIngestor
             'name' => $name ?: $email,
             'is_company' => false,
             'is_client' => true,
+            'source' => 'lead',
             'email' => $email,
             'phone' => $fields['phone'] ?? null,
             'note' => 'Automatikusan létrehozva webes ajánlatkérésből.',

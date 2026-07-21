@@ -194,7 +194,7 @@ Agent integráció szándékosan a legutolsó lépés.
 | 1 | Vezérlőpult (valós adatokkal) | ✅ kész |
 | 2 | Projektek / Munkák | ✅ kész |
 | 3 | Ütemezés / Naptár (rétegek, ütközés-jelzés; iCloud-szinkron később) | ✅ kész |
-| 4 | Ügyfelek és partnerek (CRM) | ⬜ |
+| 4 | Ügyfelek és partnerek (CRM) – közös partner-adatbázis, szerep-szűrők, adatlap projektekkel | ✅ kész |
 | 5 | Alvállalkozók | ⬜ |
 | 6 | Munkatársak / Erőforrások | ⬜ |
 | 7 | Gépek és eszközök | ⬜ |
@@ -206,5 +206,9 @@ Agent integráció szándékosan a legutolsó lépés.
 | 13 | Feladatok / To-do – a fő menüben | ✅ kész |
 | 14 | Kommunikáció | ⬜ |
 | 15 | Riportok / Statisztikák | ⬜ |
-| 16 | Felhasználók / Jogosultságok | ⬜ |
+| 16 | Felhasználók / Jogosultságok – munkatársak, szerepkörök, aktiválás | ✅ kész |
 | 17 | Számlázz.hu integráció | ⬜ (legutolsó) |
+
+> Modulokon átívelő extra: a **webes ajánlatkérések** (acuwall.hu űrlap →
+> e-mail) automatikusan projektet + ügyfelet + felületi értesítést hoznak létre
+> (`leads:fetch` ütemezett parancs, `LEADS_IMAP_*` beállítások).

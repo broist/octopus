@@ -194,6 +194,38 @@ export interface TaskDueItem {
     project: ProjectRef | null;
 }
 
+export interface PartnerListItem {
+    id: number;
+    name: string;
+    is_company: boolean;
+    is_client: boolean;
+    is_supplier: boolean;
+    is_subcontractor: boolean;
+    roles: string[];
+    source: string;
+    contact_name: string | null;
+    email: string | null;
+    phone: string | null;
+    projects_count: number;
+}
+
+export interface PartnerDetail extends PartnerListItem {
+    tax_id: string | null;
+    address: string | null;
+    note: string | null;
+    created_at: string | null;
+}
+
+export interface PartnerProjectRow {
+    id: number;
+    code: string;
+    name: string;
+    status: ProjectStatus;
+    pm_name: string | null;
+    starts_on: string | null;
+    ends_on: string | null;
+}
+
 export interface ManagedUser {
     id: number;
     name: string;
