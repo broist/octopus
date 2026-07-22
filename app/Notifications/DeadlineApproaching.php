@@ -3,15 +3,15 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
  * Felületi (harang) értesítés közelgő vagy lejárt határidőről
  * (feladat, ütemterv-fázis, alvállalkozói/munkatársi dokumentum).
  *
- * A FELADAT-határidőkről a felelős(ök) e-mailt is kapnak a rendszerben tárolt
- * címükre (megrendelői kérés) — a többi típus csak harang-értesítés.
+ * Tételenként+állapotonként egyszer szól (dedupe). A feladat-határidőkről a
+ * felelős(ök) NAPI, tömbösített e-mailt is kapnak — azt külön a
+ * TaskDeadlineDigest kezeli, nem ez.
  */
 class DeadlineApproaching extends Notification
 {
@@ -36,35 +36,7 @@ class DeadlineApproaching extends Notification
      */
     public function via(object $notifiable): array
     {
-        // A feladat-határidőkről a felelős e-mailt is kap; a többi típus csak
-        // felületi (harang) értesítés.
-        return $this->kind === 'feladat'
-            ? ['database', 'mail']
-            : ['database'];
-    }
-
-    /**
-     * A felelősnek küldött e-mail a közelgő/lejárt feladat-határidőről.
-     */
-    public function toMail(object $notifiable): MailMessage
-    {
-        $name = $notifiable->name ?? '';
-        $mail = (new MailMessage)
-            ->subject(($this->overdue ? 'Lejárt feladat-határidő: ' : 'Közelgő feladat-határidő: ').$this->title)
-            ->greeting($name !== '' ? "Kedves {$name}!" : 'Kedves Munkatárs!');
-
-        if ($this->overdue) {
-            $mail->line('Egy Önhöz rendelt feladat határideje **lejárt**, és a feladat még nincs kész:');
-        } else {
-            $mail->line('Egy Önhöz rendelt feladatnak **közeleg a határideje**:');
-        }
-
-        return $mail
-            ->line("**{$this->title}**")
-            ->line("Határidő: {$this->dueOn}")
-            ->action('Feladat megnyitása', url($this->url))
-            ->line('Kérjük, nézzen rá és szükség esetén frissítse a feladat állapotát.')
-            ->salutation('Üdvözlettel: Octopus');
+        return ['database'];
     }
 
     /**

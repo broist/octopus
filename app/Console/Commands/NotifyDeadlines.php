@@ -8,16 +8,20 @@ use App\Models\SubcontractorCertification;
 use App\Models\Task;
 use App\Models\User;
 use App\Notifications\DeadlineApproaching;
+use App\Notifications\TaskDeadlineDigest;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
 /**
  * Közelgő és lejárt határidők értesítése (feladatok + ütemterv-fázisok).
  *
- * Naponta fut. Minden tételhez tételenként+határidőnként+állapotonként egyszer
- * küld értesítést (a data.dedupe kulccsal védve a duplikáció ellen), így nem
- * spamel: egy „közeleg" és egy „lejárt" jelzés érkezik érintettenként.
+ * Naponta fut. A HARANG-értesítés tételenként+állapotonként egyszer szól (dedupe).
+ * A FELADATOKRÓL a felelős(ök) ezen felül NAPI, tömbösített e-mailt is kapnak:
+ * felhasználónként EGY levél az összes nyitott (nem kész), közelgő/lejárt
+ * határidejű feladatukkal — minden nap, amíg készre nem állítják (cache-őr, hogy
+ * naponta csak egyszer menjen).
  */
 class NotifyDeadlines extends Command
 {
@@ -39,6 +43,7 @@ class NotifyDeadlines extends Command
             ->flip();
 
         $count = 0;
+        $emailCount = 0;
 
         // --- Feladatok ---
         $tasks = Task::query()
@@ -48,6 +53,7 @@ class NotifyDeadlines extends Command
             ->with('assignees')
             ->get();
 
+        // 1) Harang-értesítés: tételenként+állapotonként egyszer (dedupe).
         foreach ($tasks as $task) {
             $overdue = $task->isOverdue();
             $key = "task-{$task->id}-{$task->due_on->toDateString()}-".($overdue ? 'over' : 'soon');
@@ -62,6 +68,32 @@ class NotifyDeadlines extends Command
                 'feladat', $task->title, $task->due_on->toDateString(), $overdue, '/tasks', $key,
             ));
             $count += $recipients->count();
+        }
+
+        // 2) Napi tömbösített e-mail: felhasználónként EGY levél az összes
+        //    nyitott, közelgő/lejárt feladatával. Naponta egyszer (cache-őr).
+        $today = today()->toDateString();
+        $digests = [];
+        foreach ($tasks as $task) {
+            $overdue = $task->isOverdue();
+            foreach ($task->assignees->where('is_active', true)->where('is_external', false) as $assignee) {
+                $digests[$assignee->id]['user'] ??= $assignee;
+                $digests[$assignee->id]['tasks'][] = [
+                    'title' => $task->title,
+                    'due_on' => $task->due_on->toDateString(),
+                    'overdue' => $overdue,
+                ];
+            }
+        }
+
+        foreach ($digests as $uid => $digest) {
+            $cacheKey = "task-digest-{$uid}-{$today}";
+            if (Cache::has($cacheKey)) {
+                continue; // ma már kapott emlékeztetőt
+            }
+            $digest['user']->notify(new TaskDeadlineDigest($digest['tasks']));
+            Cache::put($cacheKey, true, now()->addDay());
+            $emailCount++;
         }
 
         // --- Ütemterv-fázisok ---
@@ -160,7 +192,7 @@ class NotifyDeadlines extends Command
             }
         }
 
-        $this->info("Kiküldött határidő-értesítések: {$count}.");
+        $this->info("Kiküldött harang-értesítések: {$count}. Napi feladat-emlékeztető e-mailek: {$emailCount}.");
 
         return self::SUCCESS;
     }
