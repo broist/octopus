@@ -30,9 +30,20 @@ import type {
     TaskStatus,
 } from '@/types/models';
 
+type TaskScope = '' | 'project' | 'internal';
+
 interface IndexProps extends Record<string, unknown> {
     tasks: TaskItem[];
-    filters: { search: string; project: number | null; priority: string; creator: number | null; mine: boolean };
+    filters: {
+        search: string;
+        project: number | null;
+        priority: string;
+        creator: number | null;
+        assignee: number | null;
+        scope: TaskScope;
+        mine: boolean;
+    };
+    scopeCounts: { all: number; project: number; internal: number };
     statuses: Record<string, string>;
     priorities: Record<string, string>;
     users: Option[];
@@ -252,7 +263,7 @@ function TaskModal({
                                     }
                                     className={`${selectClass} w-full`}
                                 >
-                                    <option value="">– Nincs projekt –</option>
+                                    <option value="">Belső feladat (nincs projekt)</option>
                                     {projects.map((p) => (
                                         <option key={p.id} value={p.id}>
                                             {p.label}
@@ -448,9 +459,12 @@ function TaskCard({
                 </span>
             </div>
 
-            {(task.project || task.due_on || task.attachments.length > 0) && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-                    {task.project && <span className="font-mono">{task.project.code}</span>}
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
+                    {task.project ? (
+                        <span className="font-mono">{task.project.code}</span>
+                    ) : (
+                        <span className="chip bg-sidebar/10 text-[10px] text-sidebar">Belső</span>
+                    )}
                     {task.due_on && (
                         <span
                             className={clsx(
@@ -469,7 +483,6 @@ function TaskCard({
                         </span>
                     )}
                 </div>
-            )}
 
             {task.assignees.length > 0 && (
                 <div className="mt-2 flex -space-x-1.5">
@@ -493,7 +506,7 @@ function TaskCard({
 /* ------------------------------------------------------------------ */
 
 export default function Index() {
-    const { tasks, filters, statuses, priorities, users, creators, projects, auth } =
+    const { tasks, filters, scopeCounts, statuses, priorities, users, creators, projects, auth } =
         usePageProps<IndexProps>();
 
     const canCreate = auth.permissions.includes('tasks.create');
@@ -508,6 +521,8 @@ export default function Index() {
     const [project, setProject] = useState(filters.project ? String(filters.project) : '');
     const [priority, setPriority] = useState(filters.priority);
     const [creator, setCreator] = useState(filters.creator ? String(filters.creator) : '');
+    const [assignee, setAssignee] = useState(filters.assignee ? String(filters.assignee) : '');
+    const [scope, setScope] = useState<TaskScope>(filters.scope);
     const [mine, setMine] = useState(filters.mine);
     const firstRender = useRef(true);
 
@@ -521,16 +536,25 @@ export default function Index() {
                 route('tasks.index'),
                 {
                     search: search || undefined,
-                    project: project || undefined,
+                    // Belső hatókörben a projektszűrő nem értelmezett.
+                    project: scope === 'internal' ? undefined : project || undefined,
                     priority: priority || undefined,
                     creator: creator || undefined,
+                    assignee: assignee || undefined,
+                    scope: scope || undefined,
                     mine: mine ? 1 : undefined,
                 },
                 { preserveState: true, replace: true },
             );
         }, 300);
         return () => clearTimeout(t);
-    }, [search, project, priority, creator, mine]);
+    }, [search, project, priority, creator, assignee, scope, mine]);
+
+    const SCOPE_TABS: { value: TaskScope; label: string; count: number }[] = [
+        { value: '', label: 'Összes', count: scopeCounts.all },
+        { value: 'project', label: 'Projektfeladatok', count: scopeCounts.project },
+        { value: 'internal', label: 'Belső feladatok', count: scopeCounts.internal },
+    ];
 
     const sortedTasks = useMemo(() => {
         const copy = [...tasks];
@@ -567,7 +591,15 @@ export default function Index() {
         }
     };
 
-    const hasFilters = filters.search || filters.project || filters.priority || filters.creator || filters.mine;
+    const hasOtherFilters = !!(
+        filters.search ||
+        filters.project ||
+        filters.priority ||
+        filters.creator ||
+        filters.assignee ||
+        filters.mine
+    );
+    const hasFilters = hasOtherFilters || !!filters.scope;
 
     return (
         <>
@@ -575,7 +607,7 @@ export default function Index() {
 
             <PageHeader
                 title="Feladatok / To-do"
-                subtitle="Egyéni és csapatszintű feladatok — kanban tábla vagy rendezhető lista."
+                subtitle="Projekthez kötött és belső feladatok együtt — ki mivel foglalkozik, kanban táblán vagy listán."
                 actions={
                     canCreate && (
                         <button
@@ -588,6 +620,30 @@ export default function Index() {
                     )
                 }
             />
+
+            {/* Hatókör-váltó: összes / projektfeladatok / belső feladatok */}
+            <div className="mb-4 inline-flex rounded-md border border-line bg-white p-0.5">
+                {SCOPE_TABS.map((tab) => (
+                    <button
+                        key={tab.value || 'all'}
+                        onClick={() => setScope(tab.value)}
+                        className={clsx(
+                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition',
+                            scope === tab.value ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
+                        )}
+                    >
+                        {tab.label}
+                        <span
+                            className={clsx(
+                                'rounded-sm px-1.5 py-0.5 text-[11px]',
+                                scope === tab.value ? 'bg-white/20 text-white' : 'bg-cream text-ink-faint',
+                            )}
+                        >
+                            {tab.count}
+                        </span>
+                    </button>
+                ))}
+            </div>
 
             {/* Szűrők + nézetváltó */}
             <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
@@ -605,11 +661,22 @@ export default function Index() {
                     />
                 </div>
 
-                <select value={project} onChange={(e) => setProject(e.target.value)} className={`${selectClass} lg:w-48`}>
-                    <option value="">Minden projekt</option>
-                    {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                            {p.label}
+                {scope !== 'internal' && (
+                    <select value={project} onChange={(e) => setProject(e.target.value)} className={`${selectClass} lg:w-48`}>
+                        <option value="">Minden projekt</option>
+                        {projects.map((p) => (
+                            <option key={p.id} value={p.id}>
+                                {p.label}
+                            </option>
+                        ))}
+                    </select>
+                )}
+
+                <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={`${selectClass} lg:w-44`}>
+                    <option value="">Minden felelős</option>
+                    {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                            {u.name}
                         </option>
                     ))}
                 </select>
@@ -689,9 +756,11 @@ export default function Index() {
                     </span>
                     <h2 className="mt-4 text-lg font-semibold text-sidebar">Nincs feladat</h2>
                     <p className="mt-1 max-w-sm text-sm text-ink-soft">
-                        {hasFilters
-                            ? 'A szűrésnek megfelelő feladat nincs — módosítsa a feltételeket.'
-                            : 'Hozza létre az első feladatot, és kövesse listán vagy kanban táblán.'}
+                        {scope === 'internal' && !hasOtherFilters
+                            ? 'Még nincs belső feladat. Vegyen fel egyet projekt nélkül — csak a cégen belüli teendőkhöz.'
+                            : hasFilters
+                              ? 'A szűrésnek megfelelő feladat nincs — módosítsa a feltételeket.'
+                              : 'Hozza létre az első feladatot, és kövesse listán vagy kanban táblán.'}
                     </p>
                 </div>
             ) : view === 'kanban' ? (
@@ -793,7 +862,7 @@ export default function Index() {
                                         {task.project ? (
                                             <span className="font-mono text-xs">{task.project.code}</span>
                                         ) : (
-                                            <span className="text-ink-faint">–</span>
+                                            <span className="chip bg-sidebar/10 text-sidebar">Belső</span>
                                         )}
                                     </td>
                                     <td className="px-3 py-2.5">

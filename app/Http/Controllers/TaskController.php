@@ -24,14 +24,30 @@ class TaskController extends Controller
         $projectId = $request->integer('project');
         $priority = $request->string('priority')->toString();
         $creatorId = $request->integer('creator');
+        $assigneeId = $request->integer('assignee');
+        $scope = $request->string('scope')->toString(); // '' | 'project' | 'internal'
         $mine = $request->boolean('mine');
 
-        $tasks = Task::query()
+        // A hatókör (scope) kivételével minden szűrő közös — a lista és a
+        // hatókör-darabszámok is ezt használják.
+        $applyFilters = fn ($q) => $q
             ->when($mine, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->where('users.id', $request->user()->id)))
+            ->when($assigneeId > 0, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->where('users.id', $assigneeId)))
             ->when($projectId > 0, fn ($q) => $q->where('project_id', $projectId))
             ->when($priority !== '', fn ($q) => $q->where('priority', $priority))
             ->when($creatorId > 0, fn ($q) => $q->where('created_by', $creatorId))
-            ->when($search !== '', fn ($q) => $q->where('title', 'ilike', "%{$search}%"))
+            ->when($search !== '', fn ($q) => $q->where('title', 'ilike', "%{$search}%"));
+
+        // Hatókör-darabszámok (a scope szűrő nélkül) — a szegmens-váltóhoz.
+        $scopeCounts = [
+            'all' => $applyFilters(Task::query())->count(),
+            'project' => $applyFilters(Task::query())->whereNotNull('project_id')->count(),
+            'internal' => $applyFilters(Task::query())->whereNull('project_id')->count(),
+        ];
+
+        $tasks = $applyFilters(Task::query())
+            ->when($scope === 'project', fn ($q) => $q->whereNotNull('project_id'))
+            ->when($scope === 'internal', fn ($q) => $q->whereNull('project_id'))
             ->with(['project:id,code,name', 'assignees:id,name', 'creator:id,name', 'attachments'])
             ->orderByRaw("case priority when 'magas' then 0 when 'kozepes' then 1 else 2 end")
             ->orderByRaw('due_on asc nulls last')
@@ -69,8 +85,11 @@ class TaskController extends Controller
                 'project' => $projectId ?: null,
                 'priority' => $priority,
                 'creator' => $creatorId ?: null,
+                'assignee' => $assigneeId ?: null,
+                'scope' => $scope,
                 'mine' => $mine,
             ],
+            'scopeCounts' => $scopeCounts,
             'statuses' => Task::STATUSES,
             'priorities' => Task::PRIORITIES,
             'users' => User::where('is_active', true)->where('is_external', false)
