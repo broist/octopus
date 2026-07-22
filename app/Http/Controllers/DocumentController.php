@@ -159,6 +159,9 @@ class DocumentController extends Controller
                 'max:'.DocumentRequest::MAX_KB,
                 'extensions:'.DocumentRequest::EXTENSIONS,
             ],
+            // Feltöltéskori átnevezés: fájlonként megadható megjelenített név.
+            'names' => ['nullable', 'array'],
+            'names.*' => ['nullable', 'string', 'max:190'],
             'folder_id' => ['nullable', 'integer', 'exists:folders,id'],
             'category' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(Document::CATEGORIES))],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
@@ -172,16 +175,32 @@ class DocumentController extends Controller
         $folder = isset($data['folder_id']) ? Folder::findOrFail($data['folder_id']) : null;
         abort_unless(Folder::canCreateIn($user, $folder), 403);
 
+        $names = $data['names'] ?? [];
+
         $count = 0;
-        DB::transaction(function () use ($data, $folder, $user, $request, &$count) {
-            foreach ($request->file('files') as $file) {
+        DB::transaction(function () use ($data, $names, $folder, $user, $request, &$count) {
+            foreach ($request->file('files') as $i => $file) {
                 $mime = $file->getMimeType() ?? '';
                 $category = $data['category']
                     ?: (str_starts_with($mime, 'image/') ? 'foto' : 'egyeb');
                 $disk = Document::diskFor($category, (int) $file->getSize());
 
+                // Megadott név (átnevezés) vagy az eredeti fájlnév kiterjesztés nélkül.
+                $originalName = $file->getClientOriginalName();
+                $ext = $file->getClientOriginalExtension();
+                $chosen = trim((string) ($names[$i] ?? ''));
+                $title = Str::limit(
+                    $chosen !== '' ? $chosen : pathinfo($originalName, PATHINFO_FILENAME),
+                    190,
+                    '',
+                );
+                // A letöltési fájlnév is kövesse az átnevezést, megtartva a kiterjesztést.
+                $downloadName = $chosen !== '' && $ext !== ''
+                    ? "{$title}.{$ext}"
+                    : ($chosen !== '' ? $title : $originalName);
+
                 $document = Document::create([
-                    'title' => Str::limit(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME), 190, ''),
+                    'title' => $title,
                     'category' => $category,
                     'folder_id' => $folder?->id,
                     'project_id' => $data['project_id'] ?? null,
@@ -195,7 +214,7 @@ class DocumentController extends Controller
                     'is_current' => true,
                     'disk' => $disk,
                     'file_path' => $path,
-                    'original_filename' => $file->getClientOriginalName(),
+                    'original_filename' => $downloadName,
                     'mime_type' => $mime,
                     'size_bytes' => $file->getSize(),
                     'uploaded_by' => $user->id,
