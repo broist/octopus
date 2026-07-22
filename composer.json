@@ -12,6 +12,7 @@
         "laravel/fortify": "^1.0|^2.0",
         "laravel/framework": "^13.12",
         "league/flysystem-aws-s3-v3": "^3.0",
+        "mpdf/mpdf": "^8.3",
         "sabre/dav": "^4.6",
         "spatie/laravel-permission": "^6.0|^7.0",
         "tightenco/ziggy": "^2.0",

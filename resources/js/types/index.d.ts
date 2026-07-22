@@ -31,12 +31,20 @@ export interface FlashMessages {
     info?: string | null;
 }
 
+export interface NavChild {
+    key: string;
+    label: string;
+    route: string;
+    tab: string | null;
+}
+
 export interface NavItem {
     key: string;
     label: string;
     route: string;
     icon: string;
     group: string;
+    children: NavChild[];
 }
 
 export interface NotificationItem {

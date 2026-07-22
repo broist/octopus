@@ -119,6 +119,14 @@ class HandleInertiaRequests extends Middleware
                 'route' => $module['route'],
                 'icon' => $module['icon'],
                 'group' => $module['group'],
+                'children' => collect($module['children'] ?? [])
+                    ->map(fn (array $child) => [
+                        'key' => $child['key'],
+                        'label' => $child['label'],
+                        'route' => $child['route'],
+                        'tab' => $child['tab'] ?? null,
+                    ])
+                    ->all(),
             ])
             ->values()
             ->all();

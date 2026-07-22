@@ -16,6 +16,7 @@ import {
     MessageSquare,
     BarChart3,
     UserCog,
+    FileSpreadsheet,
     Circle,
     type LucideIcon,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ const iconMap: Record<string, LucideIcon> = {
     MessageSquare,
     BarChart3,
     UserCog,
+    FileSpreadsheet,
 };
 
 export function moduleIcon(name: string): LucideIcon {

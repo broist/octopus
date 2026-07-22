@@ -32,6 +32,15 @@ class Modules
             ['key' => 'staff',          'label' => 'Munkatársak / Erőforrások',   'route' => 'staff.index',    'icon' => 'Users',           'group' => 'resources'],
             ['key' => 'machines',       'label' => 'Gépek és eszközök',           'route' => 'machines.index', 'icon' => 'Truck',           'group' => 'resources'],
             ['key' => 'materials',      'label' => 'Anyagok / Készlet',           'route' => 'materials.index', 'icon' => 'Package',        'group' => 'resources'],
+            // Ajánlatkérő (árajánlat-készítő) — a Működés csoport első pontja,
+            // almenükkel (a portolt AcuWall app nézetei).
+            ['key' => 'ajanlatok',      'label' => 'Ajánlatkérő',                 'route' => 'ajanlatok.index', 'icon' => 'FileSpreadsheet', 'group' => 'operations', 'children' => [
+                ['key' => 'ajanlatok.list',       'label' => 'Ajánlatok',      'route' => 'ajanlatok.index',      'tab' => null],
+                ['key' => 'ajanlatok.kalkulacio', 'label' => 'Kalkuláció',     'route' => 'ajanlatok.tab',        'tab' => 'kalkulacio'],
+                ['key' => 'ajanlatok.feltetelek', 'label' => 'Feltételek',     'route' => 'ajanlatok.tab',        'tab' => 'feltetelek'],
+                ['key' => 'ajanlatok.fizetes',    'label' => 'Fizetési ütem',  'route' => 'ajanlatok.tab',        'tab' => 'fizetes'],
+                ['key' => 'ajanlatok.ugyfel',     'label' => 'Ügyfél nézet',   'route' => 'ajanlatok.tab',        'tab' => 'ugyfel'],
+            ]],
             ['key' => 'finance',        'label' => 'Pénzügy / Költségvetés',      'route' => 'finance.index',  'icon' => 'Wallet',          'group' => 'operations'],
             ['key' => 'daily-reports',  'label' => 'Napi jelentés / Munkanapló',  'route' => 'daily-reports.index', 'icon' => 'ClipboardList', 'group' => 'operations'],
             ['key' => 'qa',             'label' => 'Minőség / Munkavédelem',      'route' => 'qa.index',       'icon' => 'ShieldCheck',     'group' => 'operations'],
@@ -94,6 +103,7 @@ class Modules
             'documents',
             'tasks',
             'users',
+            'ajanlatok',
         ];
     }
 }
