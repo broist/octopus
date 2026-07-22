@@ -21,6 +21,11 @@ interface Row {
     done: boolean;
 }
 
+interface Overlap {
+    from: Date;
+    to: Date;
+}
+
 /**
  * Könnyű, saját SVG Gantt: fázisok idővonalon, készültség-kitöltéssel,
  * függőség-nyilakkal, "ma" vonallal. Csúszó fázis korallal jelölve (spec §6).
@@ -46,7 +51,25 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
         const days = Math.max(1, Math.round((max.getTime() - min.getTime()) / MS_PER_DAY));
         const dayW = days <= 70 ? 18 : days <= 180 ? 9 : 5;
 
-        return { rows, min, max, days, dayW };
+        // Ütközések: BK-függőségnél az utód az előd befejezése előtt/alatt indul,
+        // tehát a két szakasz átfed → párhuzamos munkavégzés az adott napokon.
+        const byId = new Map(rows.map((r) => [r.phase.id, r]));
+        const overlaps: Overlap[] = [];
+        for (const r of rows) {
+            for (const dep of r.phase.dependencies ?? []) {
+                if (dep.type !== 'bk') continue;
+                const pre = byId.get(dep.id);
+                if (!pre) continue;
+                if (r.start.getTime() <= pre.end.getTime()) {
+                    overlaps.push({
+                        from: r.start,
+                        to: new Date(Math.min(r.end.getTime(), pre.end.getTime())),
+                    });
+                }
+            }
+        }
+
+        return { rows, min, max, days, dayW, overlaps };
     }, [phases]);
 
     if (!model) {
@@ -57,7 +80,7 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
         );
     }
 
-    const { rows, min, max, days, dayW } = model;
+    const { rows, min, max, days, dayW, overlaps } = model;
     const width = LABEL_W + days * dayW + 16;
     const height = HEADER_H + rows.length * ROW_H + 8;
 
@@ -121,13 +144,30 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                     </g>
                 ))}
 
+                {/* Ütközés-sávok (párhuzamos munkavégzés / átfedő szakaszok) */}
+                {overlaps.map((o, i) => {
+                    const bx = x(o.from);
+                    const bw = Math.max(x(new Date(o.to.getTime() + MS_PER_DAY)) - bx, 2);
+                    return (
+                        <g key={`ov-${i}`}>
+                            <rect
+                                x={bx}
+                                y={HEADER_H - 8}
+                                width={bw}
+                                height={height - HEADER_H + 8}
+                                fill="rgba(192,80,58,0.14)"
+                            />
+                            <line x1={bx} x2={bx} y1={HEADER_H - 8} y2={height} stroke="#C0503A" strokeWidth={1} strokeDasharray="2 2" />
+                            <line x1={bx + bw} x2={bx + bw} y1={HEADER_H - 8} y2={height} stroke="#C0503A" strokeWidth={1} strokeDasharray="2 2" />
+                        </g>
+                    );
+                })}
+
                 {/* Sorok elválasztói + nevek */}
                 {rows.map((r, i) => {
                     const y = HEADER_H + i * ROW_H;
-                    const name =
-                        r.phase.name.length > 24
-                            ? `${r.phase.name.slice(0, 23)}…`
-                            : r.phase.name;
+                    const label = `${r.phase.seq}. ${r.phase.name}`;
+                    const name = label.length > 26 ? `${label.slice(0, 25)}…` : label;
                     return (
                         <g key={r.phase.id}>
                             <line
@@ -252,6 +292,9 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                 <span className="flex items-center gap-1.5">
                     <span className="inline-block h-3 w-px border-l border-dashed border-coral" />{' '}
                     Mai nap
+                </span>
+                <span className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-5 rounded-sm bg-coral/20" /> Ütközés / párhuzam
                 </span>
             </div>
         </div>

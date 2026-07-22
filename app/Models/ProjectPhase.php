@@ -6,10 +6,19 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProjectPhase extends Model
 {
     use HasFactory;
+
+    /** Függőség-típusok (elődhöz képest). */
+    public const DEP_TYPES = [
+        'bk' => 'Befejezés → Kezdés',
+        'kk' => 'Kezdés → Kezdés',
+        'bb' => 'Befejezés → Befejezés',
+        'kb' => 'Kezdés → Befejezés',
+    ];
 
     protected $fillable = [
         'project_id',
@@ -17,6 +26,7 @@ class ProjectPhase extends Model
         'sort_order',
         'starts_on',
         'due_on',
+        'work_days',
         'progress',
         'note',
     ];
@@ -27,6 +37,7 @@ class ProjectPhase extends Model
             'starts_on' => 'date:Y-m-d',
             'due_on' => 'date:Y-m-d',
             'progress' => 'integer',
+            'work_days' => 'integer',
         ];
     }
 
@@ -36,7 +47,7 @@ class ProjectPhase extends Model
     }
 
     /**
-     * Amikre ez a fázis vár (Gantt-függőségek).
+     * Amikre ez a fázis vár (Gantt-függőségek), típussal és eltolással.
      */
     public function dependencies(): BelongsToMany
     {
@@ -45,7 +56,7 @@ class ProjectPhase extends Model
             'phase_dependencies',
             'phase_id',
             'depends_on_id'
-        );
+        )->withPivot(['dep_type', 'lag_days']);
     }
 
     /**
@@ -59,6 +70,11 @@ class ProjectPhase extends Model
             'depends_on_id',
             'phase_id'
         );
+    }
+
+    public function resources(): HasMany
+    {
+        return $this->hasMany(PhaseResource::class)->orderBy('id');
     }
 
     /**

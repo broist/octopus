@@ -49,4 +49,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/project-phases/{phase}/move', [ProjectPhaseController::class, 'move'])
         ->middleware('can:projects.edit')->name('projects.phases.move');
+
+    Route::post('/project-phases/{phase}/compute', [ProjectPhaseController::class, 'compute'])
+        ->middleware('can:projects.edit')->name('projects.phases.compute');
 });

@@ -122,6 +122,7 @@ class ProjectController extends Controller
             'projectManager:id,name',
             'parent:id,code,name',
             'phases.dependencies:id',
+            'phases.resources',
             'subprojects' => fn ($q) => $q->withAvg('phases as phases_progress', 'progress')
                 ->withCount('phases')
                 ->withCount(['phases as overdue_count' => function ($q) {
@@ -154,16 +155,31 @@ class ProjectController extends Controller
                 'is_slipping' => $project->phases->contains(fn ($ph) => $ph->isOverdue())
                     || $project->subprojects->contains(fn ($sp) => $sp->overdue_count > 0),
             ],
-            'phases' => $project->phases->map(fn ($ph) => [
+            'phases' => $project->phases->values()->map(fn ($ph, $i) => [
                 'id' => $ph->id,
+                'seq' => $i + 1,
                 'name' => $ph->name,
                 'sort_order' => $ph->sort_order,
                 'starts_on' => $ph->starts_on?->toDateString(),
                 'due_on' => $ph->due_on?->toDateString(),
+                'work_days' => $ph->work_days,
                 'progress' => $ph->progress,
                 'note' => $ph->note,
                 'is_overdue' => $ph->isOverdue(),
                 'depends_on' => $ph->dependencies->pluck('id')->values(),
+                'dependencies' => $ph->dependencies->map(fn ($d) => [
+                    'id' => $d->id,
+                    'type' => $d->pivot->dep_type,
+                    'lag' => (int) $d->pivot->lag_days,
+                ])->values(),
+                'resources' => $ph->resources->map(fn ($r) => [
+                    'id' => $r->id,
+                    'kind' => $r->kind,
+                    'name' => $r->name,
+                    'quantity' => $r->quantity,
+                    'work_days' => $r->work_days,
+                    'note' => $r->note,
+                ])->values(),
             ])->values(),
             'subprojects' => $project->subprojects->map(fn ($sp) => [
                 'id' => $sp->id,

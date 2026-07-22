@@ -29,16 +29,39 @@ export interface ProjectListItem {
     is_slipping: boolean;
 }
 
+export type DepType = 'bk' | 'kk' | 'bb' | 'kb';
+
+export interface PhaseDependency {
+    id: number;
+    type: DepType;
+    lag: number;
+}
+
+export type ResourceKind = 'kezi' | 'gepi';
+
+export interface PhaseResource {
+    id?: number;
+    kind: ResourceKind;
+    name: string;
+    quantity: number;
+    work_days: number;
+    note: string | null;
+}
+
 export interface PhaseItem {
     id: number;
+    seq: number;
     name: string;
     sort_order: number;
     starts_on: string | null;
     due_on: string | null;
+    work_days: number | null;
     progress: number;
     note: string | null;
     is_overdue: boolean;
     depends_on: number[];
+    dependencies: PhaseDependency[];
+    resources: PhaseResource[];
 }
 
 export interface SubprojectItem {
