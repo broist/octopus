@@ -14,7 +14,7 @@ class DeadlineApproaching extends Notification
     use Queueable;
 
     /**
-     * @param  string  $kind   'feladat' | 'fazis' | 'tanusitvany'
+     * @param  string  $kind   'feladat' | 'fazis' | 'tanusitvany' | 'kepesites'
      * @param  string  $dedupeKey  egyedi kulcs a napi duplikáció ellen
      */
     public function __construct(
@@ -43,10 +43,11 @@ class DeadlineApproaching extends Notification
         $label = match ($this->kind) {
             'fazis' => 'Ütemterv-határidő',
             'tanusitvany' => 'Alvállalkozói dokumentum',
+            'kepesites' => 'Munkatárs végzettség / jogosultság',
             default => 'Feladat határidő',
         };
         $when = $this->overdue ? 'lejárt' : 'közeleg';
-        $dateLabel = $this->kind === 'tanusitvany' ? 'lejárat' : 'határidő';
+        $dateLabel = in_array($this->kind, ['tanusitvany', 'kepesites'], true) ? 'lejárat' : 'határidő';
 
         return [
             'title' => "{$label} {$when}",

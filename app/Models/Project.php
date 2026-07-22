@@ -127,6 +127,14 @@ class Project extends Model
         return $this->hasMany(Task::class);
     }
 
+    /**
+     * Munkaidő-bejegyzések a projekten (6. modul, munkaidő-nyilvántartás).
+     */
+    public function workLogs(): HasMany
+    {
+        return $this->hasMany(WorkLog::class);
+    }
+
     /* ------------------------------------------------------------------ */
     /* Helpers                                                             */
     /* ------------------------------------------------------------------ */

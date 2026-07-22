@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -27,6 +29,7 @@ class User extends Authenticatable
         'password',
         'phone',
         'job_title',
+        'hired_on',
         'avatar_path',
         'locale',
         'is_active',
@@ -55,9 +58,35 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'hired_on' => 'date',
             'is_active' => 'boolean',
             'is_external' => 'boolean',
         ];
+    }
+
+    // --- Munkatársak / Erőforrások (6. modul) ---
+
+    public function qualifications(): HasMany
+    {
+        return $this->hasMany(StaffQualification::class)->orderByRaw('valid_until is null, valid_until');
+    }
+
+    public function workLogs(): HasMany
+    {
+        return $this->hasMany(WorkLog::class)->orderByDesc('work_date');
+    }
+
+    public function absences(): HasMany
+    {
+        return $this->hasMany(StaffAbsence::class)->orderByDesc('starts_on');
+    }
+
+    /**
+     * Belső munkatársak (nem külső portál-felhasználók) — a Staff modul köre.
+     */
+    public function scopeInternal(Builder $query): Builder
+    {
+        return $query->where('is_external', false);
     }
 
     /**

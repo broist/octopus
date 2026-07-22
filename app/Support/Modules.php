@@ -100,6 +100,7 @@ class Modules
             'projects',
             'crm',
             'subcontractors',
+            'staff',
             'scheduling',
             'documents',
             'tasks',

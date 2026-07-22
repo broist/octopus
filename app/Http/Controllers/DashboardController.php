@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\Project;
 use App\Models\ProjectActivity;
 use App\Models\ProjectPhase;
+use App\Models\StaffQualification;
 use App\Models\SubcontractorCertification;
 use App\Models\Task;
 use Illuminate\Http\Request;
@@ -134,6 +135,34 @@ class DashboardController extends Controller
                 'text' => $text,
                 'project_id' => null,
                 'url' => route('subcontractors.show', $partnerId),
+            ];
+        }
+
+        // Lejáró/lejárt munkatársi végzettségek (spec §5/6: lejárati
+        // figyelmeztetés). Munkatársanként egy sor.
+        $expiringQuals = StaffQualification::query()
+            ->whereNotNull('valid_until')
+            ->whereDate('valid_until', '<=', $certHorizon->toDateString())
+            ->whereHas('user', fn ($q) => $q->where('is_external', false))
+            ->with('user:id,name')
+            ->orderBy('valid_until')
+            ->get()
+            ->groupBy('user_id');
+
+        foreach ($expiringQuals as $userId => $quals) {
+            $person = $quals->first()->user;
+            if (! $person) {
+                continue;
+            }
+            $expired = $quals->filter(fn ($q) => $q->valid_until->isPast())->count();
+            $text = $expired > 0
+                ? "{$person->name}: {$expired} lejárt végzettség / jogosultság"
+                : "{$person->name}: hamarosan lejáró végzettség / jogosultság";
+            $alerts[] = [
+                'key' => "staff-qual-{$userId}",
+                'text' => $text,
+                'project_id' => null,
+                'url' => route('staff.show', $userId),
             ];
         }
 

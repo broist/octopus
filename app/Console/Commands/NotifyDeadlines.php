@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ProjectPhase;
+use App\Models\StaffQualification;
 use App\Models\SubcontractorCertification;
 use App\Models\Task;
 use App\Models\User;
@@ -126,6 +127,36 @@ class NotifyDeadlines extends Command
                     "/subcontractors/{$cert->partner->id}", $key,
                 ));
                 $count += $certRecipients->count();
+            }
+        }
+
+        // --- Munkatársi végzettségek / jogosultságok (30 napos előrejelzés) ---
+        $qualRecipients = User::where('is_active', true)->where('is_external', false)
+            ->permission('staff.edit')->get();
+
+        if ($qualRecipients->isNotEmpty()) {
+            $quals = StaffQualification::query()
+                ->whereNotNull('valid_until')
+                ->whereDate('valid_until', '<=', $certHorizon)
+                ->whereHas('user', fn ($q) => $q->where('is_external', false))
+                ->with('user:id,name')
+                ->get();
+
+            foreach ($quals as $qual) {
+                if (! $qual->user) {
+                    continue;
+                }
+                $overdue = $qual->valid_until->isPast();
+                $key = "qual-{$qual->id}-{$qual->valid_until->toDateString()}-".($overdue ? 'over' : 'soon');
+                if ($sent->has($key)) {
+                    continue;
+                }
+                $title = "{$qual->user->name} – {$qual->name}";
+                Notification::send($qualRecipients, new DeadlineApproaching(
+                    'kepesites', $title, $qual->valid_until->toDateString(), $overdue,
+                    "/staff/{$qual->user->id}", $key,
+                ));
+                $count += $qualRecipients->count();
             }
         }
 

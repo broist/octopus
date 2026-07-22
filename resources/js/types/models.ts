@@ -331,6 +331,76 @@ export interface SubAssignedProject {
     note: string | null;
 }
 
+// --- Munkatársak / Erőforrások (6. modul) ---
+
+export interface StaffListItem {
+    id: number;
+    name: string;
+    email: string;
+    phone: string | null;
+    job_title: string | null;
+    initials: string;
+    is_active: boolean;
+    role: string | null;
+    expiring_count: number;
+    on_leave: boolean;
+}
+
+export interface StaffDetail extends StaffListItem {
+    hired_on: string | null;
+    created_at: string | null;
+}
+
+export interface StaffQualification {
+    id: number;
+    type: string;
+    type_label: string;
+    name: string;
+    issuer: string | null;
+    valid_from: string | null;
+    valid_until: string | null;
+    note: string | null;
+    status: CertStatus;
+    has_file: boolean;
+    file_name: string | null;
+    download_url: string | null;
+}
+
+export interface StaffWorkLog {
+    id: number;
+    work_date: string;
+    hours: number;
+    note: string | null;
+    project: { id: number; code: string; name: string } | null;
+}
+
+export interface StaffHoursByProject {
+    project: { id: number; code: string; name: string } | null;
+    hours: number;
+}
+
+export interface StaffAbsence {
+    id: number;
+    type: string;
+    type_label: string;
+    starts_on: string;
+    ends_on: string;
+    note: string | null;
+    is_current: boolean;
+    is_future: boolean;
+}
+
+/** Szabadság a naptár csak-olvasható rétegében. */
+export interface AbsenceCalItem {
+    key: string;
+    user_id: number;
+    user_name: string | null;
+    type: string;
+    type_label: string;
+    starts_on: string;
+    ends_on: string;
+}
+
 export interface ManagedUser {
     id: number;
     name: string;

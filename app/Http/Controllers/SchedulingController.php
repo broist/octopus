@@ -6,8 +6,10 @@ use App\Http\Requests\CalendarEventRequest;
 use App\Models\CalendarEvent;
 use App\Models\Project;
 use App\Models\ProjectPhase;
+use App\Models\StaffAbsence;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\Staff;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -112,6 +114,23 @@ class SchedulingController extends Controller
             ])
             ->values();
 
+        // --- Szabadság / távollét (6. modul, csak olvasható réteg) ---
+        $absences = StaffAbsence::query()
+            ->overlapping($rangeStart->toDateString(), $rangeEnd->toDateString())
+            ->when($personFilter > 0, fn ($q) => $q->where('user_id', $personFilter))
+            ->with('user:id,name')
+            ->get()
+            ->map(fn (StaffAbsence $a) => [
+                'key' => "tavollet-{$a->id}",
+                'user_id' => $a->user_id,
+                'user_name' => $a->user?->name,
+                'type' => $a->type,
+                'type_label' => Staff::ABSENCE_TYPES[$a->type] ?? $a->type,
+                'starts_on' => $a->starts_on->toDateString(),
+                'ends_on' => $a->ends_on->toDateString(),
+            ])
+            ->values();
+
         return Inertia::render('Scheduling/Index', [
             'view' => $view,
             'date' => $date->toDateString(),
@@ -136,6 +155,7 @@ class SchedulingController extends Controller
             ])->values(),
             'milestones' => $milestones,
             'taskItems' => $taskItems,
+            'absences' => $absences,
             'projects' => Project::orderBy('code')->get(['id', 'code', 'name'])
                 ->map(fn ($p) => ['id' => $p->id, 'code' => $p->code, 'name' => $p->name])->values(),
             'users' => User::where('is_active', true)->where('is_external', false)

@@ -7,6 +7,7 @@ import {
     ChevronRight,
     Diamond,
     Flag,
+    PalmtreeIcon,
     Plus,
     TriangleAlert,
     User as UserIcon,
@@ -17,6 +18,7 @@ import PageHeader from '@/Components/PageHeader';
 import EventModal from '@/Pages/Scheduling/Partials/EventModal';
 import { usePageProps } from '@/hooks/usePageProps';
 import type {
+    AbsenceCalItem,
     CalendarEventItem,
     MilestoneItem,
     Option,
@@ -31,6 +33,7 @@ interface IndexProps extends Record<string, unknown> {
     events: CalendarEventItem[];
     milestones: MilestoneItem[];
     taskItems: TaskDueItem[];
+    absences: AbsenceCalItem[];
     projects: ProjectRef[];
     users: Option[];
     types: Record<string, string>;
@@ -76,10 +79,11 @@ interface Layers {
     personal: boolean;
     deadlines: boolean;
     tasks: boolean;
+    absences: boolean;
     offProjects: number[];
 }
 
-const defaultLayers: Layers = { personal: true, deadlines: true, tasks: true, offProjects: [] };
+const defaultLayers: Layers = { personal: true, deadlines: true, tasks: true, absences: true, offProjects: [] };
 
 function loadLayers(): Layers {
     try {
@@ -93,7 +97,7 @@ function loadLayers(): Layers {
 
 export default function Index() {
     const {
-        view, date, range, events, milestones, taskItems,
+        view, date, range, events, milestones, taskItems, absences,
         projects, users, types, filters, canCreate,
     } = usePageProps<IndexProps>();
 
@@ -139,11 +143,16 @@ export default function Index() {
         () => (layers.tasks ? taskItems.filter((t) => !projOff(t.project)) : []),
         [taskItems, layers],
     );
+    const visibleAbsences = useMemo(
+        () => (layers.absences ? absences : []),
+        [absences, layers],
+    );
 
     const itemsFor = (day: string) => ({
         events: visibleEvents.filter((e) => e.starts_on <= day && day <= e.ends_on),
         milestones: visibleMilestones.filter((m) => m.date === day),
         tasks: visibleTasks.filter((t) => t.date === day),
+        absences: visibleAbsences.filter((a) => a.starts_on <= day && day <= a.ends_on),
     });
 
     /* -------- napok listája a tartományban -------- */
@@ -219,9 +228,25 @@ export default function Index() {
         </button>
     );
 
+    const AbsenceChip = ({ a, detailed = false }: { a: AbsenceCalItem; detailed?: boolean }) => (
+        <div
+            className={clsx(
+                'flex w-full items-center gap-1 truncate rounded-sm border border-amber-300/70 bg-amber-50 px-1.5 py-0.5 text-left text-[11px] font-medium leading-4 text-amber-700',
+                detailed && 'py-1 text-xs',
+            )}
+            title={`${a.user_name ?? ''} — ${a.type_label}`}
+        >
+            <PalmtreeIcon size={10} className="shrink-0" />
+            <span className="truncate">
+                {a.user_name} · {a.type_label}
+            </span>
+        </div>
+    );
+
     const DayItems = ({ day, limit }: { day: string; limit: number }) => {
-        const { events: evs, milestones: ms, tasks: ts } = itemsFor(day);
+        const { events: evs, milestones: ms, tasks: ts, absences: abs } = itemsFor(day);
         const all: ReactNode[] = [
+            ...abs.map((a) => <AbsenceChip key={a.key} a={a} />),
             ...ms.map((m) => <MilestoneChip key={m.key} m={m} />),
             ...ts.map((t) => <TaskChip key={t.key} t={t} />),
             ...evs.map((e) => <EventChip key={e.id} e={e} />),
@@ -363,6 +388,16 @@ export default function Index() {
                             <CheckSquare size={11} className="text-accent" />
                             Feladatok
                         </label>
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={layers.absences}
+                                onChange={(e) => setLayers({ ...layers, absences: e.target.checked })}
+                                className="rounded-sm border-line text-accent focus:ring-accent/40"
+                            />
+                            <PalmtreeIcon size={11} className="text-amber-600" />
+                            Szabadság / távollét
+                        </label>
                     </div>
 
                     {projects.length > 0 && (
@@ -489,8 +524,8 @@ export default function Index() {
                     )}
 
                     {view === 'day' && (() => {
-                        const { events: evs, milestones: ms, tasks: ts } = itemsFor(date);
-                        const empty = evs.length + ms.length + ts.length === 0;
+                        const { events: evs, milestones: ms, tasks: ts, absences: abs } = itemsFor(date);
+                        const empty = evs.length + ms.length + ts.length + abs.length === 0;
                         return (
                             <div className="space-y-4">
                                 {empty && (
@@ -505,6 +540,17 @@ export default function Index() {
                                             Új bejegyzés
                                         </button>
                                     </div>
+                                )}
+
+                                {abs.length > 0 && (
+                                    <section className="o-card p-4">
+                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                                            Szabadság / távollét
+                                        </h3>
+                                        <div className="space-y-1">
+                                            {abs.map((a) => <AbsenceChip key={a.key} a={a} detailed />)}
+                                        </div>
+                                    </section>
                                 )}
 
                                 {ms.length > 0 && (
