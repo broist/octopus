@@ -195,7 +195,7 @@ Agent integráció szándékosan a legutolsó lépés.
 | 2 | Projektek / Munkák | ✅ kész |
 | 3 | Ütemezés / Naptár (rétegek, ütközés-jelzés; iCloud-szinkron később) | ✅ kész |
 | 4 | Ügyfelek és partnerek (CRM) – közös partner-adatbázis, szerep-szűrők, adatlap projektekkel | ✅ kész |
-| 5 | Alvállalkozók | ⬜ |
+| 5 | Alvállalkozók – szakma-szűrő, tanúsítványok lejárati figyelmeztetéssel, értékelés, dokumentumok, projekt-hozzárendelés | ✅ kész |
 | 6 | Munkatársak / Erőforrások | ⬜ |
 | 7 | Gépek és eszközök | ⬜ |
 | 8 | Anyagok / Készlet | ⬜ |

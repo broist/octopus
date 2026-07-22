@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -76,6 +77,16 @@ class Project extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Partner::class, 'client_id');
+    }
+
+    /**
+     * A projekten dolgozó alvállalkozók (5. modul, project_subcontractors).
+     */
+    public function subcontractors(): BelongsToMany
+    {
+        return $this->belongsToMany(Partner::class, 'project_subcontractors')
+            ->withPivot(['id', 'scope', 'note'])
+            ->withTimestamps();
     }
 
     public function projectManager(): BelongsTo

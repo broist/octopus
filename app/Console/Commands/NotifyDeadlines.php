@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ProjectPhase;
+use App\Models\SubcontractorCertification;
 use App\Models\Task;
 use App\Models\User;
 use App\Notifications\DeadlineApproaching;
@@ -94,6 +95,38 @@ class NotifyDeadlines extends Command
                 'fazis', $title, $phase->due_on->toDateString(), $overdue, $url, $key,
             ));
             $count += $recipients->count();
+        }
+
+        // --- Alvállalkozói dokumentumok (biztosítás, engedély, tanúsítvány) ---
+        // Hosszabb, 30 napos előrejelzés — a megújítás átfutási ideje miatt.
+        $certHorizon = today()->addDays(30);
+        $certRecipients = User::where('is_active', true)->where('is_external', false)
+            ->permission('subcontractors.edit')->get();
+
+        if ($certRecipients->isNotEmpty()) {
+            $certs = SubcontractorCertification::query()
+                ->whereNotNull('valid_until')
+                ->whereDate('valid_until', '<=', $certHorizon)
+                ->whereHas('partner', fn ($q) => $q->where('is_subcontractor', true))
+                ->with('partner:id,name')
+                ->get();
+
+            foreach ($certs as $cert) {
+                if (! $cert->partner) {
+                    continue;
+                }
+                $overdue = $cert->valid_until->isPast();
+                $key = "cert-{$cert->id}-{$cert->valid_until->toDateString()}-".($overdue ? 'over' : 'soon');
+                if ($sent->has($key)) {
+                    continue;
+                }
+                $title = "{$cert->partner->name} – {$cert->name}";
+                Notification::send($certRecipients, new DeadlineApproaching(
+                    'tanusitvany', $title, $cert->valid_until->toDateString(), $overdue,
+                    "/subcontractors/{$cert->partner->id}", $key,
+                ));
+                $count += $certRecipients->count();
+            }
         }
 
         $this->info("Kiküldött határidő-értesítések: {$count}.");

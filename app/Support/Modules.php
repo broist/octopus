@@ -99,6 +99,7 @@ class Modules
             'dashboard',
             'projects',
             'crm',
+            'subcontractors',
             'scheduling',
             'documents',
             'tasks',

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -32,6 +33,9 @@ class Partner extends Model
         'is_client',
         'is_supplier',
         'is_subcontractor',
+        'trade',
+        'crew_size',
+        'availability_note',
         'source',
         'contact_name',
         'email',
@@ -48,6 +52,7 @@ class Partner extends Model
             'is_client' => 'boolean',
             'is_supplier' => 'boolean',
             'is_subcontractor' => 'boolean',
+            'crew_size' => 'integer',
         ];
     }
 
@@ -56,9 +61,57 @@ class Partner extends Model
         return $this->hasMany(Project::class, 'client_id');
     }
 
+    public function certifications(): HasMany
+    {
+        return $this->hasMany(SubcontractorCertification::class)->orderByRaw('valid_until is null, valid_until');
+    }
+
+    public function ratings(): HasMany
+    {
+        return $this->hasMany(SubcontractorRating::class)->latest();
+    }
+
+    public function subcontractorDocuments(): HasMany
+    {
+        return $this->hasMany(SubcontractorDocument::class)->latest();
+    }
+
+    /**
+     * Azok a projektek, amelyeken az alvállalkozó dolgozik (project_subcontractors).
+     */
+    public function assignedProjects(): BelongsToMany
+    {
+        return $this->belongsToMany(Project::class, 'project_subcontractors')
+            ->withPivot(['id', 'scope', 'note'])
+            ->withTimestamps();
+    }
+
     public function scopeClients(Builder $query): Builder
     {
         return $query->where('is_client', true);
+    }
+
+    public function scopeSubcontractors(Builder $query): Builder
+    {
+        return $query->where('is_subcontractor', true);
+    }
+
+    /**
+     * Szűrés szakma szerint (partner.trade).
+     */
+    public function scopeTrade(Builder $query, string $trade): Builder
+    {
+        return $trade !== '' ? $query->where('trade', $trade) : $query;
+    }
+
+    /**
+     * Az értékelések átlaga (1–5), null ha még nincs értékelés.
+     */
+    public function averageRating(): ?float
+    {
+        $avg = $this->ratings()->avg('score');
+
+        return $avg !== null ? round((float) $avg, 1) : null;
     }
 
     /**

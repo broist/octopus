@@ -260,6 +260,77 @@ export interface PartnerProjectRow {
     ends_on: string | null;
 }
 
+// --- Alvállalkozók (5. modul) ---
+
+export interface SubcontractorListItem {
+    id: number;
+    name: string;
+    is_company: boolean;
+    trade: string | null;
+    trade_label: string | null;
+    crew_size: number | null;
+    contact_name: string | null;
+    email: string | null;
+    phone: string | null;
+    avg_rating: number | null;
+    expiring_count: number;
+}
+
+export interface SubcontractorDetail extends SubcontractorListItem {
+    tax_id: string | null;
+    address: string | null;
+    availability_note: string | null;
+    note: string | null;
+    created_at: string | null;
+}
+
+export type CertStatus = 'ok' | 'soon' | 'expired';
+
+export interface SubCertification {
+    id: number;
+    type: string;
+    type_label: string;
+    name: string;
+    issuer: string | null;
+    valid_from: string | null;
+    valid_until: string | null;
+    note: string | null;
+    status: CertStatus;
+    has_file: boolean;
+    file_name: string | null;
+    download_url: string | null;
+}
+
+export interface SubRating {
+    id: number;
+    score: number;
+    comment: string | null;
+    project: { id: number; code: string; name: string } | null;
+    rater_name: string | null;
+    created_at: string | null;
+}
+
+export interface SubDocument {
+    id: number;
+    category: string;
+    category_label: string;
+    name: string;
+    size_bytes: number;
+    uploader_name: string | null;
+    created_at: string | null;
+    download_url: string;
+}
+
+export interface SubAssignedProject {
+    id: number;
+    code: string;
+    name: string;
+    status: ProjectStatus;
+    pivot_id: number;
+    scope: string | null;
+    note: string | null;
+}
+
 export interface ManagedUser {
     id: number;
     name: string;

@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\Project;
 use App\Models\ProjectActivity;
 use App\Models\ProjectPhase;
+use App\Models\SubcontractorCertification;
 use App\Models\Task;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -97,12 +98,42 @@ class DashboardController extends Controller
         $overdueTasksCount = Task::where('status', '!=', 'kesz')
             ->whereDate('due_on', '<', $today)->count();
 
-        $alerts = $slipping->values()->all();
+        $alerts = $slipping->map(fn ($a) => $a + ['url' => null])->values()->all();
         if ($overdueTasksCount > 0) {
             $alerts[] = [
                 'key' => 'lejart-feladatok',
                 'text' => "{$overdueTasksCount} feladat határideje lejárt",
                 'project_id' => null,
+                'url' => null,
+            ];
+        }
+
+        // Lejáró/lejárt alvállalkozói dokumentumok (spec §5/1: biztosítás,
+        // engedély hamarosan lejár). Alvállalkozónként egy sor.
+        $certHorizon = today()->addDays(30);
+        $expiringCerts = SubcontractorCertification::query()
+            ->whereNotNull('valid_until')
+            ->whereDate('valid_until', '<=', $certHorizon->toDateString())
+            ->whereHas('partner', fn ($q) => $q->where('is_subcontractor', true))
+            ->with('partner:id,name')
+            ->orderBy('valid_until')
+            ->get()
+            ->groupBy('partner_id');
+
+        foreach ($expiringCerts as $partnerId => $certs) {
+            $partner = $certs->first()->partner;
+            if (! $partner) {
+                continue;
+            }
+            $expired = $certs->filter(fn ($c) => $c->valid_until->isPast())->count();
+            $text = $expired > 0
+                ? "{$partner->name}: {$expired} lejárt dokumentum (biztosítás/engedély)"
+                : "{$partner->name}: hamarosan lejáró dokumentum";
+            $alerts[] = [
+                'key' => "alv-cert-{$partnerId}",
+                'text' => $text,
+                'project_id' => null,
+                'url' => route('subcontractors.show', $partnerId),
             ];
         }
 

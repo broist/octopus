@@ -40,7 +40,7 @@ interface DashboardProps extends Record<string, unknown> {
         label: string;
         project: { id: number; code: string } | null;
     }[];
-    alerts: { key: string; text: string; project_id: number | null }[];
+    alerts: { key: string; text: string; project_id: number | null; url?: string | null }[];
     todayEvents: {
         id: number;
         title: string;
@@ -275,27 +275,21 @@ export default function Dashboard() {
                             <EmptyNote>Nincs riasztás — minden ütemben halad. 👌</EmptyNote>
                         ) : (
                             <div className="space-y-1.5">
-                                {alerts.map((a) =>
-                                    a.project_id ? (
-                                        <Link
-                                            key={a.key}
-                                            href={route('projects.show', a.project_id)}
-                                            className="flex items-start gap-2 rounded-md bg-coral/10 px-3 py-2 text-sm text-[#9c3d2b] transition hover:bg-coral/15"
-                                        >
-                                            <TriangleAlert size={15} className="mt-0.5 shrink-0" />
-                                            {a.text}
-                                        </Link>
-                                    ) : (
-                                        <Link
-                                            key={a.key}
-                                            href={route('tasks.index')}
-                                            className="flex items-start gap-2 rounded-md bg-coral/10 px-3 py-2 text-sm text-[#9c3d2b] transition hover:bg-coral/15"
-                                        >
-                                            <TriangleAlert size={15} className="mt-0.5 shrink-0" />
-                                            {a.text}
-                                        </Link>
-                                    ),
-                                )}
+                                {alerts.map((a) => (
+                                    <Link
+                                        key={a.key}
+                                        href={
+                                            a.url ??
+                                            (a.project_id
+                                                ? route('projects.show', a.project_id)
+                                                : route('tasks.index'))
+                                        }
+                                        className="flex items-start gap-2 rounded-md bg-coral/10 px-3 py-2 text-sm text-[#9c3d2b] transition hover:bg-coral/15"
+                                    >
+                                        <TriangleAlert size={15} className="mt-0.5 shrink-0" />
+                                        {a.text}
+                                    </Link>
+                                ))}
                             </div>
                         )}
                     </Panel>
