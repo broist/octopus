@@ -104,6 +104,7 @@ class Modules
             'tasks',
             'users',
             'ajanlatok',
+            'communication',
         ];
     }
 }

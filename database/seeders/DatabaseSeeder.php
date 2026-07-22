@@ -59,6 +59,12 @@ class DatabaseSeeder extends Seeder
         // tartalmat éri majd el (16. modul).
         $this->createRoleIfMissing('Megrendelő', []);
 
+        // Sebészi pótlás meglévő telepítésekhez (nem írja felül a testreszabást):
+        // a Projektvezető megkapja az Ajánlatkérő modul jogait (megrendelői kérés).
+        if ($pv = Role::where('name', 'Projektvezető')->where('guard_name', 'web')->first()) {
+            $pv->givePermissionTo(['ajanlatok.view', 'ajanlatok.create', 'ajanlatok.edit', 'ajanlatok.delete']);
+        }
+
         // 4) Kezdő admin felhasználó — csak ha még nem létezik.
         $admin = User::firstOrCreate(
             ['email' => env('OCTOPUS_ADMIN_EMAIL', 'admin@octopus.local')],

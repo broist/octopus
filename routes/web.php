@@ -34,6 +34,7 @@ require __DIR__.'/documents.php';
 require __DIR__.'/tasks.php';
 require __DIR__.'/users.php';
 require __DIR__.'/quotes.php';
+require __DIR__.'/communication.php';
 require __DIR__.'/notifications.php';
 
 // Placeholder routes for not-yet-implemented modules (keeps the sidebar whole).

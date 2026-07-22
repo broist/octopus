@@ -14,3 +14,8 @@ Schedule::command('leads:fetch')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Közelgő és lejárt határidők értesítése (feladatok + ütemezés), naponta reggel.
+Schedule::command('notifications:deadlines')
+    ->dailyAt('07:00')
+    ->withoutOverlapping();
