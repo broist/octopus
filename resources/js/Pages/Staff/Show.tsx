@@ -7,6 +7,7 @@ import {
     Clock,
     Download,
     FolderKanban,
+    Lock,
     Mail,
     PalmtreeIcon,
     Pencil,
@@ -41,6 +42,7 @@ interface ShowProps extends Record<string, unknown> {
     hours_by_project: StaffHoursByProject[];
     absences: StaffAbsence[];
     can_log_hours: boolean;
+    can_edit: boolean;
     projects: { id: number; code: string; name: string }[];
     qualification_types: Record<string, string>;
     absence_types: Record<string, string>;
@@ -100,13 +102,11 @@ export default function Show() {
         hours_by_project,
         absences,
         can_log_hours,
+        can_edit: canEdit,
         projects,
         qualification_types,
         absence_types,
-        auth,
     } = usePageProps<ShowProps>();
-
-    const canEdit = auth.permissions.includes('staff.edit');
 
     const [hrOpen, setHrOpen] = useState(false);
     const [qualOpen, setQualOpen] = useState(false);
@@ -168,6 +168,12 @@ export default function Show() {
             <div className="mb-5 flex flex-wrap items-center gap-2">
                 {staff.role && <span className="chip bg-sidebar/10 text-sidebar">{staff.role}</span>}
                 {!staff.is_active && <span className="chip chip-grey">Inaktív fiók</span>}
+                {!canEdit && (
+                    <span className="chip inline-flex items-center gap-1 chip-grey" title="Más munkatárs adatlapja csak megtekinthető">
+                        <Lock size={11} />
+                        Csak megtekintés
+                    </span>
+                )}
                 {currentAbsence && (
                     <span className="chip inline-flex items-center gap-1 bg-amber-100 text-amber-700">
                         <PalmtreeIcon size={12} />

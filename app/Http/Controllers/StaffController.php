@@ -97,7 +97,9 @@ class StaffController extends Controller
             ->sortByDesc('hours')
             ->values();
 
-        $canLogHours = $request->user()->id === $user->id || $request->user()->can('staff.edit');
+        // Mindenki KIZÁRÓLAG a saját adatlapját szerkesztheti (megrendelői
+        // döntés) — az admint is beleértve. Máshoz csak megtekintés.
+        $isSelf = $request->user()->id === $user->id;
 
         return Inertia::render('Staff/Show', [
             'staff' => [
@@ -128,6 +130,7 @@ class StaffController extends Controller
             ])->values(),
             'month_hours' => $monthHours,
             'hours_by_project' => $byProject,
+            'can_edit' => $isSelf,
             'absences' => $user->absences->map(fn (StaffAbsence $a) => [
                 'id' => $a->id,
                 'type' => $a->type,
@@ -138,7 +141,7 @@ class StaffController extends Controller
                 'is_current' => $a->starts_on->lte(today()) && $a->ends_on->gte(today()),
                 'is_future' => $a->starts_on->gt(today()),
             ])->values(),
-            'can_log_hours' => $canLogHours,
+            'can_log_hours' => $isSelf,
             'projects' => Project::query()->whereNull('parent_id')
                 ->orderByDesc('updated_at')->limit(200)->get(['id', 'code', 'name'])
                 ->map(fn ($p) => ['id' => $p->id, 'code' => $p->code, 'name' => $p->name]),
@@ -154,6 +157,7 @@ class StaffController extends Controller
     public function updateHr(Request $request, User $user): RedirectResponse
     {
         abort_if($user->is_external, 404);
+        $this->assertSelf($request, $user->id);
 
         $data = $request->validate([
             'phone' => ['nullable', 'string', 'max:50'],
@@ -171,6 +175,7 @@ class StaffController extends Controller
     public function storeQualification(Request $request, User $user): RedirectResponse
     {
         abort_if($user->is_external, 404);
+        $this->assertSelf($request, $user->id);
 
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(Staff::QUALIFICATION_TYPES))],
@@ -212,8 +217,10 @@ class StaffController extends Controller
         return back()->with('success', 'Végzettség / jogosultság rögzítve.');
     }
 
-    public function destroyQualification(StaffQualification $qualification): RedirectResponse
+    public function destroyQualification(Request $request, StaffQualification $qualification): RedirectResponse
     {
+        $this->assertSelf($request, $qualification->user_id);
+
         if ($qualification->hasFile()) {
             Storage::disk($qualification->disk)->delete($qualification->file_path);
         }
@@ -234,12 +241,7 @@ class StaffController extends Controller
     public function storeWorkLog(Request $request, User $user): RedirectResponse
     {
         abort_if($user->is_external, 404);
-        // Saját magának bárki rögzíthet; máshoz staff.edit kell.
-        abort_unless(
-            $request->user()->id === $user->id || $request->user()->can('staff.edit'),
-            403,
-            'Csak a saját munkaidejét rögzítheti.',
-        );
+        $this->assertSelf($request, $user->id);
 
         $data = $request->validate([
             'work_date' => ['required', 'date', 'before_or_equal:today'],
@@ -265,10 +267,7 @@ class StaffController extends Controller
 
     public function destroyWorkLog(Request $request, WorkLog $workLog): RedirectResponse
     {
-        abort_unless(
-            $request->user()->id === $workLog->user_id || $request->user()->can('staff.edit'),
-            403,
-        );
+        $this->assertSelf($request, $workLog->user_id);
 
         $workLog->delete();
 
@@ -280,6 +279,7 @@ class StaffController extends Controller
     public function storeAbsence(Request $request, User $user): RedirectResponse
     {
         abort_if($user->is_external, 404);
+        $this->assertSelf($request, $user->id);
 
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(Staff::ABSENCE_TYPES))],
@@ -303,14 +303,29 @@ class StaffController extends Controller
         return back()->with('success', 'Távollét rögzítve — a naptárban is megjelenik.');
     }
 
-    public function destroyAbsence(StaffAbsence $absence): RedirectResponse
+    public function destroyAbsence(Request $request, StaffAbsence $absence): RedirectResponse
     {
+        $this->assertSelf($request, $absence->user_id);
+
         $absence->delete();
 
         return back()->with('success', 'Távollét törölve.');
     }
 
     // --- Segédfüggvények ------------------------------------------------------
+
+    /**
+     * Csak a saját adatlap szerkeszthető (megrendelői döntés) — az admint is
+     * beleértve. Máshoz tartozó adat módosítása 403.
+     */
+    private function assertSelf(Request $request, int $ownerId): void
+    {
+        abort_unless(
+            $request->user()->id === $ownerId,
+            403,
+            'Csak a saját munkatárs-adatlapját szerkesztheti.',
+        );
+    }
 
     private function serveFile(string $disk, string $path, string $filename): SymfonyResponse
     {

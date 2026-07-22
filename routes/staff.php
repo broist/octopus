@@ -9,10 +9,13 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | Saját dolgozók HR-nézete a közös users táblán (belső felhasználók).
-| Végzettségek lejárati figyelmeztetéssel, manuális munkaidő-nyilvántartás
-| (mindenki saját magának), szabadság/távollét. A fiók/szerepkör a 16.
-| modulban kezelt. Minden útvonal a staff.* jogosultsághoz kötött; a
-| munkaidő-rögzítés önkiszolgáló (a controller ellenőrzi a saját/edit jogot).
+| Végzettségek lejárati figyelmeztetéssel, manuális munkaidő-nyilvántartás,
+| szabadság/távollét. A fiók/szerepkör a 16. modulban kezelt.
+|
+| Jogosultság: a modul megtekintése staff.view-hoz kötött. A SZERKESZTÉS
+| tulajdon-alapú — mindenki KIZÁRÓLAG a saját adatlapját módosíthatja (az
+| admint is beleértve, megrendelői döntés); ezt a controller assertSelf()-e
+| érvényesíti, ezért a módosító útvonalak is csak staff.view-t kérnek.
 |
 */
 
@@ -24,29 +27,29 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('can:staff.view')->name('staff.show');
 
     Route::put('/staff/{user}/hr', [StaffController::class, 'updateHr'])
-        ->middleware('can:staff.edit')->name('staff.hr.update');
+        ->middleware('can:staff.view')->name('staff.hr.update');
 
-    // --- Végzettségek / jogosultságok ---
+    // --- Végzettségek / jogosultságok (csak a saját) ---
     Route::post('/staff/{user}/qualifications', [StaffController::class, 'storeQualification'])
-        ->middleware('can:staff.edit')->name('staff.qualifications.store');
+        ->middleware('can:staff.view')->name('staff.qualifications.store');
 
     Route::get('/staff-qualifications/{qualification}/download', [StaffController::class, 'downloadQualification'])
         ->middleware('can:staff.view')->name('staff.qualifications.download');
 
     Route::delete('/staff-qualifications/{qualification}', [StaffController::class, 'destroyQualification'])
-        ->middleware('can:staff.edit')->name('staff.qualifications.destroy');
+        ->middleware('can:staff.view')->name('staff.qualifications.destroy');
 
-    // --- Munkaidő-nyilvántartás (önkiszolgáló: saját magának bárki) ---
+    // --- Munkaidő-nyilvántartás (csak a saját) ---
     Route::post('/staff/{user}/work-logs', [StaffController::class, 'storeWorkLog'])
         ->middleware('can:staff.view')->name('staff.work-logs.store');
 
     Route::delete('/work-logs/{workLog}', [StaffController::class, 'destroyWorkLog'])
         ->middleware('can:staff.view')->name('staff.work-logs.destroy');
 
-    // --- Szabadság / távollét ---
+    // --- Szabadság / távollét (csak a saját) ---
     Route::post('/staff/{user}/absences', [StaffController::class, 'storeAbsence'])
-        ->middleware('can:staff.edit')->name('staff.absences.store');
+        ->middleware('can:staff.view')->name('staff.absences.store');
 
     Route::delete('/staff-absences/{absence}', [StaffController::class, 'destroyAbsence'])
-        ->middleware('can:staff.edit')->name('staff.absences.destroy');
+        ->middleware('can:staff.view')->name('staff.absences.destroy');
 });
