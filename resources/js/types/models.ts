@@ -131,6 +131,14 @@ export interface ProjectDocumentRow {
 export type TaskStatus = 'teendo' | 'folyamatban' | 'kesz';
 export type TaskPriority = 'alacsony' | 'kozepes' | 'magas';
 
+export interface TaskAttachment {
+    id: number;
+    name: string;
+    size: number;
+    is_image: boolean;
+    url: string;
+}
+
 export interface TaskItem {
     id: number;
     title: string;
@@ -141,8 +149,11 @@ export interface TaskItem {
     is_overdue: boolean;
     project: { id: number; code: string; name: string } | null;
     assignees: Option[];
+    creator: Option | null;
+    created_at: string;
     can_move: boolean;
     completed_at: string | null;
+    attachments: TaskAttachment[];
 }
 
 export interface ProjectOption {

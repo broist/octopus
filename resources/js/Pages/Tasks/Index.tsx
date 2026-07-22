@@ -1,14 +1,17 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import {
     CalendarClock,
     Columns3,
+    ImageIcon,
     List,
     ListChecks,
+    Paperclip,
     Plus,
     Search,
     Trash2,
+    X,
 } from 'lucide-react';
 import clsx from 'clsx';
 import AppLayout from '@/Layouts/AppLayout';
@@ -17,15 +20,23 @@ import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
 import { usePageProps } from '@/hooks/usePageProps';
-import { fmtDate } from '@/lib/format';
-import type { Option, ProjectOption, TaskItem, TaskPriority, TaskStatus } from '@/types/models';
+import { fmtBytes, fmtDate, fmtDateTime } from '@/lib/format';
+import type {
+    Option,
+    ProjectOption,
+    TaskAttachment,
+    TaskItem,
+    TaskPriority,
+    TaskStatus,
+} from '@/types/models';
 
 interface IndexProps extends Record<string, unknown> {
     tasks: TaskItem[];
-    filters: { search: string; project: number | null; priority: string; mine: boolean };
+    filters: { search: string; project: number | null; priority: string; creator: number | null; mine: boolean };
     statuses: Record<string, string>;
     priorities: Record<string, string>;
     users: Option[];
+    creators: Option[];
     projects: ProjectOption[];
 }
 
@@ -40,6 +51,17 @@ const PRIORITY_CHIP: Record<TaskPriority, string> = {
 
 const STATUS_ORDER: TaskStatus[] = ['teendo', 'folyamatban', 'kesz'];
 
+type SortKey = 'due_asc' | 'due_desc' | 'name' | 'assignee' | 'project' | 'created_desc';
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+    { value: 'due_asc', label: 'Határidő ↑ (legközelebbi elöl)' },
+    { value: 'due_desc', label: 'Határidő ↓ (legtávolabbi elöl)' },
+    { value: 'name', label: 'Név szerint (A→Z)' },
+    { value: 'assignee', label: 'Felelős szerint' },
+    { value: 'project', label: 'Projekt szerint' },
+    { value: 'created_desc', label: 'Legújabban létrehozott' },
+];
+
 function initials(name: string): string {
     return name
         .split(/\s+/)
@@ -47,6 +69,10 @@ function initials(name: string): string {
         .map((p) => p[0])
         .join('')
         .toUpperCase();
+}
+
+function firstAssignee(t: TaskItem): string {
+    return t.assignees[0]?.name ?? '';
 }
 
 /* ------------------------------------------------------------------ */
@@ -61,7 +87,9 @@ interface TaskFormData {
     priority: TaskPriority;
     due_on: string;
     assignees: number[];
-    [key: string]: string | number | number[] | TaskStatus | TaskPriority;
+    attachments: File[];
+    remove_attachments: number[];
+    [key: string]: string | number | number[] | File[] | TaskStatus | TaskPriority;
 }
 
 function TaskModal({
@@ -91,20 +119,34 @@ function TaskModal({
         priority: task?.priority ?? 'kozepes',
         due_on: task?.due_on ?? '',
         assignees: task?.assignees.map((a) => a.id) ?? [],
+        attachments: [],
+        remove_attachments: [],
     });
+
+    // Meglévő csatolmányok (szerkesztéskor), a törlésre jelölteket kihagyva.
+    const existing = (task?.attachments ?? []).filter(
+        (a) => !form.data.remove_attachments.includes(a.id),
+    );
+
+    const isValid =
+        form.data.title.trim() !== '' &&
+        form.data.due_on !== '' &&
+        form.data.assignees.length > 0;
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        const options = { preserveScroll: true, onSuccess: onClose };
+        const options = { forceFormData: true, preserveScroll: true, onSuccess: onClose };
         if (task) {
-            form.put(route('tasks.update', task.id), options);
+            form.transform((d) => ({ ...d, _method: 'put' }));
+            form.post(route('tasks.update', task.id), options);
         } else {
+            form.transform((d) => d);
             form.post(route('tasks.store'), options);
         }
     };
 
     const destroy = () => {
-        if (task && confirm(`Biztosan törli a(z) „${task.title}" feladatot?`)) {
+        if (task && confirm(`Biztosan törli a(z) „${task.title}” feladatot?`)) {
             router.delete(route('tasks.destroy', task.id), {
                 preserveScroll: true,
                 onSuccess: onClose,
@@ -120,14 +162,27 @@ function TaskModal({
                 : [...form.data.assignees, id],
         );
 
+    const addFiles = (files: FileList | null) => {
+        if (!files) return;
+        form.setData('attachments', [...form.data.attachments, ...Array.from(files)]);
+    };
+
     return (
         <Dialog open onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
             <div className="fixed inset-0 flex items-center justify-center overflow-y-auto p-4">
-                <DialogPanel className="o-card w-full max-w-lg p-6">
+                <DialogPanel className="o-card my-8 w-full max-w-lg p-6">
                     <DialogTitle className="text-lg font-semibold text-sidebar">
                         {task ? 'Feladat szerkesztése' : 'Új feladat'}
                     </DialogTitle>
+
+                    {/* Létrehozó + dátum (szerkesztéskor) */}
+                    {task && task.creator && (
+                        <p className="mt-1 text-xs text-ink-faint">
+                            Létrehozta: <span className="font-medium text-ink-soft">{task.creator.name}</span> ·{' '}
+                            {fmtDateTime(task.created_at)}
+                        </p>
+                    )}
 
                     <form onSubmit={submit} className="mt-4 space-y-4">
                         <div>
@@ -145,10 +200,9 @@ function TaskModal({
                             <textarea
                                 value={form.data.description}
                                 onChange={(e) => form.setData('description', e.target.value)}
-                                rows={3}
+                                rows={2}
                                 className="block w-full rounded-md border-line bg-white text-sm shadow-sm focus:border-accent focus:ring-accent/40"
                             />
-                            <InputError message={form.errors.description} />
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -156,9 +210,7 @@ function TaskModal({
                                 <InputLabel value="Státusz" />
                                 <select
                                     value={form.data.status}
-                                    onChange={(e) =>
-                                        form.setData('status', e.target.value as TaskStatus)
-                                    }
+                                    onChange={(e) => form.setData('status', e.target.value as TaskStatus)}
                                     className={`${selectClass} w-full`}
                                 >
                                     {Object.entries(statuses).map(([v, l]) => (
@@ -172,9 +224,7 @@ function TaskModal({
                                 <InputLabel value="Prioritás" />
                                 <select
                                     value={form.data.priority}
-                                    onChange={(e) =>
-                                        form.setData('priority', e.target.value as TaskPriority)
-                                    }
+                                    onChange={(e) => form.setData('priority', e.target.value as TaskPriority)}
                                     className={`${selectClass} w-full`}
                                 >
                                     {Object.entries(priorities).map(([v, l]) => (
@@ -185,7 +235,7 @@ function TaskModal({
                                 </select>
                             </div>
                             <div>
-                                <InputLabel value="Határidő" />
+                                <InputLabel value="Határidő *" />
                                 <TextInput
                                     type="date"
                                     value={form.data.due_on}
@@ -198,10 +248,7 @@ function TaskModal({
                                 <select
                                     value={form.data.project_id}
                                     onChange={(e) =>
-                                        form.setData(
-                                            'project_id',
-                                            e.target.value ? Number(e.target.value) : '',
-                                        )
+                                        form.setData('project_id', e.target.value ? Number(e.target.value) : '')
                                     }
                                     className={`${selectClass} w-full`}
                                 >
@@ -216,7 +263,7 @@ function TaskModal({
                         </div>
 
                         <div>
-                            <InputLabel value="Felelős(ök)" />
+                            <InputLabel value="Felelős(ök) *" />
                             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1.5">
                                 {users.map((u) => (
                                     <label
@@ -236,8 +283,108 @@ function TaskModal({
                             <InputError message={form.errors.assignees} />
                         </div>
 
+                        {/* Csatolmányok */}
+                        <div>
+                            <InputLabel value="Csatolmányok (fájl vagy kép)" />
+                            <div className="space-y-1.5">
+                                {existing.map((a: TaskAttachment) => (
+                                    <div
+                                        key={`ex-${a.id}`}
+                                        className="flex items-center gap-2 rounded-md border border-line bg-cream/40 px-2.5 py-1.5 text-sm"
+                                    >
+                                        {a.is_image ? (
+                                            <ImageIcon size={14} className="shrink-0 text-ink-faint" />
+                                        ) : (
+                                            <Paperclip size={14} className="shrink-0 text-ink-faint" />
+                                        )}
+                                        <a
+                                            href={a.url}
+                                            className="min-w-0 flex-1 truncate text-accent hover:underline"
+                                        >
+                                            {a.name}
+                                        </a>
+                                        <span className="shrink-0 text-xs text-ink-faint">{fmtBytes(a.size)}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                form.setData('remove_attachments', [
+                                                    ...form.data.remove_attachments,
+                                                    a.id,
+                                                ])
+                                            }
+                                            className="shrink-0 rounded p-0.5 text-ink-faint hover:text-coral"
+                                            title="Eltávolítás"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {form.data.attachments.map((f, i) => (
+                                    <div
+                                        key={`new-${i}`}
+                                        className="flex items-center gap-2 rounded-md border border-accent/30 bg-accent-50/40 px-2.5 py-1.5 text-sm"
+                                    >
+                                        <Paperclip size={14} className="shrink-0 text-accent" />
+                                        <span className="min-w-0 flex-1 truncate text-ink">{f.name}</span>
+                                        <span className="shrink-0 text-xs text-ink-faint">{fmtBytes(f.size)}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                form.setData(
+                                                    'attachments',
+                                                    form.data.attachments.filter((_, idx) => idx !== i),
+                                                )
+                                            }
+                                            className="shrink-0 rounded p-0.5 text-ink-faint hover:text-coral"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-accent/40 hover:text-accent">
+                                <Paperclip size={13} />
+                                Fájl / kép hozzáadása
+                                <input
+                                    type="file"
+                                    multiple
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        addFiles(e.target.files);
+                                        e.target.value = '';
+                                    }}
+                                />
+                            </label>
+                            <InputError
+                                message={
+                                    Object.entries(form.errors).find(([k]) =>
+                                        k.startsWith('attachments'),
+                                    )?.[1]
+                                }
+                            />
+                        </div>
+
+                        {form.progress && (
+                            <div className="h-1.5 overflow-hidden rounded-sm bg-line">
+                                <div
+                                    className="h-full bg-accent transition-all"
+                                    style={{ width: `${form.progress.percentage ?? 0}%` }}
+                                />
+                            </div>
+                        )}
+
+                        {!isValid && (
+                            <p className="text-xs text-ink-faint">
+                                A felelős és a határidő megadása kötelező a mentéshez.
+                            </p>
+                        )}
+
                         <div className="flex items-center gap-2 border-t border-line pt-4">
-                            <button type="submit" className="btn-primary" disabled={form.processing}>
+                            <button
+                                type="submit"
+                                className="btn-primary"
+                                disabled={form.processing || !isValid}
+                            >
                                 {task ? 'Mentés' : 'Feladat létrehozása'}
                             </button>
                             <button type="button" className="btn-ghost" onClick={onClose}>
@@ -301,11 +448,9 @@ function TaskCard({
                 </span>
             </div>
 
-            {(task.project || task.due_on) && (
+            {(task.project || task.due_on || task.attachments.length > 0) && (
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-                    {task.project && (
-                        <span className="font-mono">{task.project.code}</span>
-                    )}
+                    {task.project && <span className="font-mono">{task.project.code}</span>}
                     {task.due_on && (
                         <span
                             className={clsx(
@@ -315,6 +460,12 @@ function TaskCard({
                         >
                             <CalendarClock size={12} />
                             {fmtDate(task.due_on)}
+                        </span>
+                    )}
+                    {task.attachments.length > 0 && (
+                        <span className="flex items-center gap-1">
+                            <Paperclip size={11} />
+                            {task.attachments.length}
                         </span>
                     )}
                 </div>
@@ -342,19 +493,21 @@ function TaskCard({
 /* ------------------------------------------------------------------ */
 
 export default function Index() {
-    const { tasks, filters, statuses, priorities, users, projects, auth } =
+    const { tasks, filters, statuses, priorities, users, creators, projects, auth } =
         usePageProps<IndexProps>();
 
     const canCreate = auth.permissions.includes('tasks.create');
     const canDelete = auth.permissions.includes('tasks.delete');
 
-    const [view, setView] = useState<'kanban' | 'list'>('kanban');
+    const [view, setView] = useState<'kanban' | 'list'>('list');
+    const [sort, setSort] = useState<SortKey>('due_asc');
     const [modal, setModal] = useState<{ task: TaskItem | null; status: TaskStatus } | null>(null);
     const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
 
     const [search, setSearch] = useState(filters.search);
     const [project, setProject] = useState(filters.project ? String(filters.project) : '');
     const [priority, setPriority] = useState(filters.priority);
+    const [creator, setCreator] = useState(filters.creator ? String(filters.creator) : '');
     const [mine, setMine] = useState(filters.mine);
     const firstRender = useRef(true);
 
@@ -370,13 +523,39 @@ export default function Index() {
                     search: search || undefined,
                     project: project || undefined,
                     priority: priority || undefined,
+                    creator: creator || undefined,
                     mine: mine ? 1 : undefined,
                 },
                 { preserveState: true, replace: true },
             );
         }, 300);
         return () => clearTimeout(t);
-    }, [search, project, priority, mine]);
+    }, [search, project, priority, creator, mine]);
+
+    const sortedTasks = useMemo(() => {
+        const copy = [...tasks];
+        const byDue = (a: TaskItem, b: TaskItem) =>
+            (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999');
+        switch (sort) {
+            case 'due_desc':
+                return copy.sort((a, b) => byDue(b, a));
+            case 'name':
+                return copy.sort((a, b) => a.title.localeCompare(b.title, 'hu'));
+            case 'assignee':
+                return copy.sort(
+                    (a, b) => firstAssignee(a).localeCompare(firstAssignee(b), 'hu') || byDue(a, b),
+                );
+            case 'project':
+                return copy.sort(
+                    (a, b) =>
+                        (a.project?.code ?? 'zzz').localeCompare(b.project?.code ?? 'zzz') || byDue(a, b),
+                );
+            case 'created_desc':
+                return copy.sort((a, b) => b.created_at.localeCompare(a.created_at));
+            default:
+                return copy.sort(byDue);
+        }
+    }, [tasks, sort]);
 
     const drop = (status: TaskStatus, e: React.DragEvent) => {
         e.preventDefault();
@@ -384,13 +563,11 @@ export default function Index() {
         const id = Number(e.dataTransfer.getData('text/plain'));
         const task = tasks.find((t) => t.id === id);
         if (task && task.status !== status && task.can_move) {
-            router.put(
-                route('tasks.status', id),
-                { status },
-                { preserveScroll: true },
-            );
+            router.put(route('tasks.status', id), { status }, { preserveScroll: true });
         }
     };
+
+    const hasFilters = filters.search || filters.project || filters.priority || filters.creator || filters.mine;
 
     return (
         <>
@@ -398,7 +575,7 @@ export default function Index() {
 
             <PageHeader
                 title="Feladatok / To-do"
-                subtitle="Egyéni és csapatszintű feladatok — húzza át a kártyákat az oszlopok között."
+                subtitle="Egyéni és csapatszintű feladatok — kanban tábla vagy rendezhető lista."
                 actions={
                     canCreate && (
                         <button
@@ -413,7 +590,7 @@ export default function Index() {
             />
 
             {/* Szűrők + nézetváltó */}
-            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
                 <div className="relative flex-1 lg:max-w-xs">
                     <Search
                         size={16}
@@ -423,16 +600,12 @@ export default function Index() {
                         type="search"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Keresés a feladatok között…"
+                        placeholder="Keresés feladat neve szerint…"
                         className="w-full rounded-md border-line bg-white py-2 pl-9 pr-3 text-sm focus:border-accent focus:ring-accent/30"
                     />
                 </div>
 
-                <select
-                    value={project}
-                    onChange={(e) => setProject(e.target.value)}
-                    className={`${selectClass} lg:w-56`}
-                >
+                <select value={project} onChange={(e) => setProject(e.target.value)} className={`${selectClass} lg:w-48`}>
                     <option value="">Minden projekt</option>
                     {projects.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -441,15 +614,20 @@ export default function Index() {
                     ))}
                 </select>
 
-                <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className={`${selectClass} lg:w-40`}
-                >
+                <select value={priority} onChange={(e) => setPriority(e.target.value)} className={`${selectClass} lg:w-36`}>
                     <option value="">Minden prioritás</option>
                     {Object.entries(priorities).map(([v, l]) => (
                         <option key={v} value={v}>
                             {l}
+                        </option>
+                    ))}
+                </select>
+
+                <select value={creator} onChange={(e) => setCreator(e.target.value)} className={`${selectClass} lg:w-44`}>
+                    <option value="">Minden létrehozó</option>
+                    {creators.map((c) => (
+                        <option key={c.id} value={c.id}>
+                            {c.name}
                         </option>
                     ))}
                 </select>
@@ -461,30 +639,46 @@ export default function Index() {
                         onChange={(e) => setMine(e.target.checked)}
                         className="rounded-sm border-line text-accent focus:ring-accent/40"
                     />
-                    Csak a saját feladataim
+                    Csak a sajátjaim
                 </label>
 
-                <div className="ml-auto flex rounded-md border border-line bg-white p-0.5">
-                    <button
-                        onClick={() => setView('kanban')}
-                        className={clsx(
-                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium',
-                            view === 'kanban' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                        )}
-                    >
-                        <Columns3 size={14} />
-                        Kanban
-                    </button>
-                    <button
-                        onClick={() => setView('list')}
-                        className={clsx(
-                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium',
-                            view === 'list' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                        )}
-                    >
-                        <List size={14} />
-                        Lista
-                    </button>
+                <div className="ml-auto flex items-center gap-2">
+                    {view === 'list' && (
+                        <select
+                            value={sort}
+                            onChange={(e) => setSort(e.target.value as SortKey)}
+                            className={`${selectClass} lg:w-56`}
+                            title="Rendezés"
+                        >
+                            {SORT_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                    {o.label}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                    <div className="flex rounded-md border border-line bg-white p-0.5">
+                        <button
+                            onClick={() => setView('list')}
+                            className={clsx(
+                                'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium',
+                                view === 'list' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
+                            )}
+                        >
+                            <List size={14} />
+                            Lista
+                        </button>
+                        <button
+                            onClick={() => setView('kanban')}
+                            className={clsx(
+                                'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium',
+                                view === 'kanban' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
+                            )}
+                        >
+                            <Columns3 size={14} />
+                            Kanban
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -495,9 +689,9 @@ export default function Index() {
                     </span>
                     <h2 className="mt-4 text-lg font-semibold text-sidebar">Nincs feladat</h2>
                     <p className="mt-1 max-w-sm text-sm text-ink-soft">
-                        {filters.search || filters.project || filters.priority || filters.mine
+                        {hasFilters
                             ? 'A szűrésnek megfelelő feladat nincs — módosítsa a feltételeket.'
-                            : 'Hozza létre az első feladatot, és kövesse kanban táblán.'}
+                            : 'Hozza létre az első feladatot, és kövesse listán vagy kanban táblán.'}
                     </p>
                 </div>
             ) : view === 'kanban' ? (
@@ -515,9 +709,7 @@ export default function Index() {
                                 onDrop={(e) => drop(status, e)}
                                 className={clsx(
                                     'rounded-card border bg-cream/60 p-3 transition',
-                                    dragOver === status
-                                        ? 'border-accent bg-accent-50'
-                                        : 'border-line',
+                                    dragOver === status ? 'border-accent bg-accent-50' : 'border-line',
                                 )}
                             >
                                 <div className="mb-3 flex items-center justify-between px-1">
@@ -552,46 +744,102 @@ export default function Index() {
                     })}
                 </div>
             ) : (
-                <div className="o-card divide-y divide-line">
-                    {[...tasks]
-                        .sort((a, b) => (a.due_on ?? '9999').localeCompare(b.due_on ?? '9999'))
-                        .map((task) => (
-                            <button
-                                key={task.id}
-                                onClick={() => setModal({ task, status: task.status })}
-                                className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-cream/50"
-                            >
-                                <span
-                                    className={clsx(
-                                        'min-w-0 flex-1 truncate text-sm font-medium',
-                                        task.status === 'kesz'
-                                            ? 'text-ink-faint line-through'
-                                            : 'text-ink',
-                                    )}
+                /* Listás nézet — oszlopfejlécekkel */
+                <div className="o-card overflow-x-auto">
+                    <table className="w-full min-w-[860px] border-collapse text-sm">
+                        <thead>
+                            <tr className="border-b border-line bg-cream/60 text-left text-[11px] uppercase tracking-wide text-ink-faint">
+                                <th className="px-4 py-2.5 font-semibold">Feladat</th>
+                                <th className="px-3 py-2.5 font-semibold">Projekt</th>
+                                <th className="px-3 py-2.5 font-semibold">Felelős</th>
+                                <th className="px-3 py-2.5 font-semibold">Létrehozó</th>
+                                <th className="px-3 py-2.5 font-semibold">Létrehozva</th>
+                                <th className="px-3 py-2.5 font-semibold">Határidő</th>
+                                <th className="px-3 py-2.5 font-semibold">Prioritás</th>
+                                <th className="px-3 py-2.5 font-semibold">Státusz</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedTasks.map((task) => (
+                                <tr
+                                    key={task.id}
+                                    onClick={() => setModal({ task, status: task.status })}
+                                    className="cursor-pointer border-b border-line/70 transition hover:bg-cream/50"
                                 >
-                                    {task.title}
-                                </span>
-                                {task.project && (
-                                    <span className="hidden font-mono text-xs text-ink-faint sm:block">
-                                        {task.project.code}
-                                    </span>
-                                )}
-                                <span className={clsx('chip', PRIORITY_CHIP[task.priority])}>
-                                    {priorities[task.priority]}
-                                </span>
-                                <span
-                                    className={clsx(
-                                        'hidden w-24 text-right text-xs sm:block',
-                                        task.is_overdue ? 'font-medium text-coral' : 'text-ink-faint',
-                                    )}
-                                >
-                                    {fmtDate(task.due_on)}
-                                </span>
-                                <span className="chip chip-grey w-24 justify-center">
-                                    {statuses[task.status]}
-                                </span>
-                            </button>
-                        ))}
+                                    <td className="px-4 py-2.5">
+                                        <div className="flex items-center gap-2">
+                                            <span
+                                                className={clsx(
+                                                    'font-medium',
+                                                    task.status === 'kesz'
+                                                        ? 'text-ink-faint line-through'
+                                                        : 'text-ink',
+                                                )}
+                                            >
+                                                {task.title}
+                                            </span>
+                                            {task.attachments.length > 0 && (
+                                                <span
+                                                    className="flex items-center gap-0.5 text-xs text-ink-faint"
+                                                    title={`${task.attachments.length} csatolmány`}
+                                                >
+                                                    <Paperclip size={12} />
+                                                    {task.attachments.length}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-ink-soft">
+                                        {task.project ? (
+                                            <span className="font-mono text-xs">{task.project.code}</span>
+                                        ) : (
+                                            <span className="text-ink-faint">–</span>
+                                        )}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                        {task.assignees.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1">
+                                                {task.assignees.map((a) => (
+                                                    <span
+                                                        key={a.id}
+                                                        className="chip chip-grey whitespace-nowrap"
+                                                    >
+                                                        {a.name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <span className="text-ink-faint">–</span>
+                                        )}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-ink-soft">
+                                        {task.creator?.name ?? <span className="text-ink-faint">–</span>}
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-2.5 text-xs text-ink-faint">
+                                        {fmtDate(task.created_at)}
+                                    </td>
+                                    <td
+                                        className={clsx(
+                                            'whitespace-nowrap px-3 py-2.5',
+                                            task.is_overdue ? 'font-medium text-coral' : 'text-ink-soft',
+                                        )}
+                                    >
+                                        {fmtDate(task.due_on)}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                        <span className={clsx('chip', PRIORITY_CHIP[task.priority])}>
+                                            {priorities[task.priority]}
+                                        </span>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                        <span className="chip chip-grey whitespace-nowrap">
+                                            {statuses[task.status]}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
 

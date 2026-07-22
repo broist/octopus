@@ -26,4 +26,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])
         ->middleware('can:tasks.delete')->name('tasks.destroy');
+
+    // Feladat-csatolmány letöltése.
+    Route::get('/task-attachments/{attachment}', [TaskController::class, 'downloadAttachment'])
+        ->middleware('can:tasks.view')->name('tasks.attachments.download');
 });
