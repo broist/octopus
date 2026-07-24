@@ -6,9 +6,15 @@ return [
 
     'driver' => env('SESSION_DRIVER', 'database'),
 
+    // Tétlenségi lejárat: 120 perc (2 óra). A redis session-kulcs TTL-je minden
+    // kéréskor megújul, így 2 óra inaktivitás után a munkamenet megszűnik, és a
+    // rendszer visszadob a bejelentkezéshez (ott újra kéri a jelszót + MFA-t).
     'lifetime' => (int) env('SESSION_LIFETIME', 120),
 
-    'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
+    // A böngészőablak/-munkamenet bezárásakor a session-süti is megszűnjön —
+    // újranyitáskor újra kell jelentkezni (jelszó + MFA). Biztonsági döntés:
+    // a rendszer bizalmas cégadatokat kezel. Alapból BE (nem env-függő).
+    'expire_on_close' => (bool) env('SESSION_EXPIRE_ON_CLOSE', true),
 
     'encrypt' => env('SESSION_ENCRYPT', false),
 

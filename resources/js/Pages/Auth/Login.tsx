@@ -5,7 +5,6 @@ import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
 import PrimaryButton from '@/Components/ui/PrimaryButton';
-import Checkbox from '@/Components/ui/Checkbox';
 
 interface LoginProps {
     canResetPassword: boolean;
@@ -13,10 +12,11 @@ interface LoginProps {
 }
 
 export default function Login({ canResetPassword, status }: LoginProps) {
+    // Nincs „emlékezz rám": biztonsági döntés, hogy minden új munkamenet teljes
+    // belépést kérjen (jelszó + MFA). A tartós süti megkerülné ezt.
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
-        remember: false,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -64,25 +64,16 @@ export default function Login({ canResetPassword, status }: LoginProps) {
                     <InputError message={errors.password} />
                 </div>
 
-                <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-sm text-ink-soft">
-                        <Checkbox
-                            name="remember"
-                            checked={data.remember}
-                            onChange={(e) => setData('remember', e.target.checked)}
-                        />
-                        Emlékezzen rám
-                    </label>
-
-                    {canResetPassword && (
+                {canResetPassword && (
+                    <div className="flex justify-end">
                         <Link
                             href={route('password.request')}
                             className="text-sm font-medium text-accent hover:text-accent-700"
                         >
                             Elfelejtette a jelszavát?
                         </Link>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 <PrimaryButton disabled={processing}>Belépés</PrimaryButton>
             </form>
