@@ -96,6 +96,11 @@ class Partner extends Model
         return $query->where('is_subcontractor', true);
     }
 
+    public function scopeSuppliers(Builder $query): Builder
+    {
+        return $query->where('is_supplier', true);
+    }
+
     /**
      * Szűrés szakma szerint (partner.trade).
      */

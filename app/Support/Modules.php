@@ -102,6 +102,7 @@ class Modules
             'subcontractors',
             'staff',
             'machines',
+            'materials',
             'scheduling',
             'documents',
             'tasks',

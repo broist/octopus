@@ -476,6 +476,67 @@ export interface MachineBookingCalItem {
     project: ProjectRef | null;
 }
 
+// --- Anyagok / Készlet (8. modul) ---
+
+export type ProcurementStatus = 'tervezett' | 'megrendelve' | 'beerkezett';
+
+export interface MaterialOption {
+    id: number;
+    name: string;
+    unit: string;
+    unit_label: string;
+    category_label: string | null;
+}
+
+export interface MaterialCatalogItem {
+    id: number;
+    name: string;
+    category: string | null;
+    category_label: string | null;
+    unit: string;
+    unit_label: string;
+    sku: string | null;
+    note: string | null;
+    procurements_count: number;
+}
+
+export interface ProcurementMaterialRef {
+    id: number;
+    name: string;
+    unit: string;
+    unit_label: string;
+    category_label: string | null;
+}
+
+export interface ProcurementItem {
+    id: number;
+    material: ProcurementMaterialRef | null;
+    project: ProjectRef | null;
+    supplier_id: number | null;
+    supplier_name: string | null;
+    status: ProcurementStatus;
+    status_label: string;
+    quantity: number;
+    unit_price: number | null;
+    line_value: number | null;
+    ordered_on: string | null;
+    expected_on: string | null;
+    received_on: string | null;
+    received_quantity: number | null;
+    note: string | null;
+}
+
+/** Anyagszállítás / beérkezés a naptár csak-olvasható rétegében. */
+export interface DeliveryCalItem {
+    key: string;
+    date: string;
+    material_name: string | null;
+    quantity: number;
+    unit_label: string | null;
+    received: boolean;
+    project: ProjectRef | null;
+}
+
 export interface ManagedUser {
     id: number;
     name: string;

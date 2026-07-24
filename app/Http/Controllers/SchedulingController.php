@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CalendarEventRequest;
 use App\Models\CalendarEvent;
 use App\Models\MachineBooking;
+use App\Models\MaterialProcurement;
 use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\StaffAbsence;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\Materials;
 use App\Support\Staff;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -155,6 +157,33 @@ class SchedulingController extends Controller
             ])
             ->values();
 
+        // --- Anyagszállítások / beérkezések (8. modul, csak olvasható réteg) ---
+        // Tényleges beérkezésnél a received_on, egyébként a várható expected_on.
+        $deliveries = MaterialProcurement::query()
+            ->deliveringBetween($rangeStart->toDateString(), $rangeEnd->toDateString())
+            ->with(['material:id,name,unit', 'project:id,code,name'])
+            ->get()
+            ->map(function (MaterialProcurement $p) {
+                $date = $p->received_on ?? $p->expected_on;
+                if ($date === null) {
+                    return null;
+                }
+
+                return [
+                    'key' => "szallitas-{$p->id}",
+                    'date' => $date->toDateString(),
+                    'material_name' => $p->material?->name,
+                    'quantity' => (float) $p->quantity,
+                    'unit_label' => $p->material ? (Materials::UNITS[$p->material->unit] ?? $p->material->unit) : null,
+                    'received' => $p->received_on !== null,
+                    'project' => $p->project
+                        ? ['id' => $p->project->id, 'code' => $p->project->code, 'name' => $p->project->name]
+                        : null,
+                ];
+            })
+            ->filter()
+            ->values();
+
         return Inertia::render('Scheduling/Index', [
             'view' => $view,
             'date' => $date->toDateString(),
@@ -181,6 +210,7 @@ class SchedulingController extends Controller
             'taskItems' => $taskItems,
             'absences' => $absences,
             'machineBookings' => $machineBookingItems,
+            'deliveries' => $deliveries,
             'projects' => Project::orderBy('code')->get(['id', 'code', 'name'])
                 ->map(fn ($p) => ['id' => $p->id, 'code' => $p->code, 'name' => $p->name])->values(),
             'users' => User::where('is_active', true)->where('is_external', false)

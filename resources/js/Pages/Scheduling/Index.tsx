@@ -7,6 +7,7 @@ import {
     ChevronRight,
     Diamond,
     Flag,
+    Package,
     PalmtreeIcon,
     Plus,
     TriangleAlert,
@@ -21,6 +22,7 @@ import { usePageProps } from '@/hooks/usePageProps';
 import type {
     AbsenceCalItem,
     CalendarEventItem,
+    DeliveryCalItem,
     MachineBookingCalItem,
     MilestoneItem,
     Option,
@@ -37,6 +39,7 @@ interface IndexProps extends Record<string, unknown> {
     taskItems: TaskDueItem[];
     absences: AbsenceCalItem[];
     machineBookings: MachineBookingCalItem[];
+    deliveries: DeliveryCalItem[];
     projects: ProjectRef[];
     users: Option[];
     types: Record<string, string>;
@@ -84,6 +87,7 @@ interface Layers {
     tasks: boolean;
     absences: boolean;
     machines: boolean;
+    deliveries: boolean;
     offProjects: number[];
 }
 
@@ -93,6 +97,7 @@ const defaultLayers: Layers = {
     tasks: true,
     absences: true,
     machines: true,
+    deliveries: true,
     offProjects: [],
 };
 
@@ -108,7 +113,7 @@ function loadLayers(): Layers {
 
 export default function Index() {
     const {
-        view, date, range, events, milestones, taskItems, absences, machineBookings,
+        view, date, range, events, milestones, taskItems, absences, machineBookings, deliveries,
         projects, users, types, filters, canCreate,
     } = usePageProps<IndexProps>();
 
@@ -162,6 +167,10 @@ export default function Index() {
         () => (layers.machines ? machineBookings.filter((b) => !projOff(b.project)) : []),
         [machineBookings, layers],
     );
+    const visibleDeliveries = useMemo(
+        () => (layers.deliveries ? deliveries.filter((d) => !projOff(d.project)) : []),
+        [deliveries, layers],
+    );
 
     const itemsFor = (day: string) => ({
         events: visibleEvents.filter((e) => e.starts_on <= day && day <= e.ends_on),
@@ -169,6 +178,7 @@ export default function Index() {
         tasks: visibleTasks.filter((t) => t.date === day),
         absences: visibleAbsences.filter((a) => a.starts_on <= day && day <= a.ends_on),
         machineBookings: visibleMachineBookings.filter((b) => b.starts_on <= day && day <= b.ends_on),
+        deliveries: visibleDeliveries.filter((d) => d.date === day),
     });
 
     /* -------- napok listája a tartományban -------- */
@@ -283,11 +293,32 @@ export default function Index() {
         </button>
     );
 
+    const DeliveryChip = ({ d, detailed = false }: { d: DeliveryCalItem; detailed?: boolean }) => (
+        <button
+            onClick={() => router.get(route('materials.index', d.project ? { project: d.project.id } : {}))}
+            className={clsx(
+                'flex w-full items-center gap-1 truncate rounded-sm border px-1.5 py-0.5 text-left text-[11px] font-medium leading-4 transition hover:bg-cream',
+                detailed && 'py-1 text-xs',
+                d.received
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                    : 'border-sky-300 bg-sky-50 text-sky-700',
+            )}
+            title={`${d.material_name ?? 'Anyag'}${d.project ? ` · ${d.project.code}` : ''} — ${d.received ? 'beérkezett' : 'várható'}`}
+        >
+            <Package size={10} className="shrink-0" />
+            <span className="truncate">
+                {d.material_name}
+                {d.project && <span className="ml-1 font-mono opacity-80">{d.project.code}</span>}
+            </span>
+        </button>
+    );
+
     const DayItems = ({ day, limit }: { day: string; limit: number }) => {
-        const { events: evs, milestones: ms, tasks: ts, absences: abs, machineBookings: mbs } = itemsFor(day);
+        const { events: evs, milestones: ms, tasks: ts, absences: abs, machineBookings: mbs, deliveries: dls } = itemsFor(day);
         const all: ReactNode[] = [
             ...abs.map((a) => <AbsenceChip key={a.key} a={a} />),
             ...mbs.map((b) => <MachineBookingChip key={b.key} b={b} />),
+            ...dls.map((d) => <DeliveryChip key={d.key} d={d} />),
             ...ms.map((m) => <MilestoneChip key={m.key} m={m} />),
             ...ts.map((t) => <TaskChip key={t.key} t={t} />),
             ...evs.map((e) => <EventChip key={e.id} e={e} />),
@@ -449,6 +480,16 @@ export default function Index() {
                             <Truck size={11} className="text-slate-500" />
                             Gépfoglalások
                         </label>
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={layers.deliveries}
+                                onChange={(e) => setLayers({ ...layers, deliveries: e.target.checked })}
+                                className="rounded-sm border-line text-accent focus:ring-accent/40"
+                            />
+                            <Package size={11} className="text-sky-600" />
+                            Anyagszállítások
+                        </label>
                     </div>
 
                     {projects.length > 0 && (
@@ -575,8 +616,8 @@ export default function Index() {
                     )}
 
                     {view === 'day' && (() => {
-                        const { events: evs, milestones: ms, tasks: ts, absences: abs, machineBookings: mbs } = itemsFor(date);
-                        const empty = evs.length + ms.length + ts.length + abs.length + mbs.length === 0;
+                        const { events: evs, milestones: ms, tasks: ts, absences: abs, machineBookings: mbs, deliveries: dls } = itemsFor(date);
+                        const empty = evs.length + ms.length + ts.length + abs.length + mbs.length + dls.length === 0;
                         return (
                             <div className="space-y-4">
                                 {empty && (
@@ -611,6 +652,17 @@ export default function Index() {
                                         </h3>
                                         <div className="space-y-1">
                                             {mbs.map((b) => <MachineBookingChip key={b.key} b={b} detailed />)}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {dls.length > 0 && (
+                                    <section className="o-card p-4">
+                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                                            Anyagszállítások / beérkezések
+                                        </h3>
+                                        <div className="space-y-1">
+                                            {dls.map((d) => <DeliveryChip key={d.key} d={d} detailed />)}
                                         </div>
                                     </section>
                                 )}

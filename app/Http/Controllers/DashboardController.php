@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CalendarEvent;
 use App\Models\Machine;
+use App\Models\MaterialProcurement;
 use App\Models\Project;
 use App\Models\ProjectActivity;
 use App\Models\ProjectPhase;
@@ -191,6 +192,28 @@ class DashboardController extends Controller
                 'text' => "{$machine->name}: ".implode(', ', $items),
                 'project_id' => null,
                 'url' => route('machines.show', $machine->id),
+            ];
+        }
+
+        // Anyaghiány (spec §8): projekthez tervezett, de még nem megrendelt
+        // anyag. Projektenként egy sor.
+        $plannedMaterials = MaterialProcurement::query()
+            ->where('status', 'tervezett')
+            ->with('project:id,code,name')
+            ->get()
+            ->groupBy('project_id');
+
+        foreach ($plannedMaterials as $projectId => $items) {
+            $project = $items->first()->project;
+            if (! $project) {
+                continue;
+            }
+            $count = $items->count();
+            $alerts[] = [
+                'key' => "anyag-hiany-{$projectId}",
+                'text' => "{$project->code} – {$project->name}: {$count} tervezett anyag még nincs megrendelve",
+                'project_id' => $project->id,
+                'url' => route('materials.index', ['project' => $project->id]),
             ];
         }
 
