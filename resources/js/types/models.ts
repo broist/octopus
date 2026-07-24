@@ -620,6 +620,80 @@ export interface FinanceQuote {
     gross_offer: number;
 }
 
+// --- Napi jelentés / Munkanapló (11. modul) ---
+
+export type WeatherIcon = 'sun' | 'partly' | 'cloud' | 'fog' | 'drizzle' | 'rain' | 'snow' | 'storm';
+
+export interface WeatherSnapshot {
+    provider: string;
+    date: string;
+    code: number;
+    label: string;
+    icon: WeatherIcon;
+    temp_max: number | null;
+    temp_min: number | null;
+    precipitation: number | null;
+    wind_max: number | null;
+}
+
+export interface DailyReportProjectOption {
+    id: number;
+    code: string;
+    name: string;
+    has_coords: boolean;
+}
+
+export interface DailyReportCrew {
+    id?: number;
+    subcontractor_id: number;
+    subcontractor_name?: string | null;
+    headcount: number;
+    note: string | null;
+}
+
+export interface DailyReportPhoto {
+    id: number;
+    name: string;
+    is_image: boolean;
+    size_bytes: number;
+    url: string;
+    uploader_name: string | null;
+}
+
+export interface DailyReportListItem {
+    id: number;
+    report_date: string;
+    project: ProjectRef | null;
+    creator_name: string | null;
+    work_done: string;
+    own_headcount: number;
+    total_headcount: number;
+    crews_count: number;
+    workers_count: number;
+    photos_count: number;
+    has_obstacles: boolean;
+    weather: WeatherSnapshot | null;
+}
+
+export interface DailyReportDetail {
+    id: number;
+    report_date: string;
+    project: ProjectRef | null;
+    creator_name: string | null;
+    created_at: string | null;
+    work_done: string;
+    obstacles: string | null;
+    own_headcount: number;
+    total_headcount: number;
+    material_movement: string | null;
+    machine_movement: string | null;
+    weather: WeatherSnapshot | null;
+    weather_fetched_at: string | null;
+    workers: Option[];
+    crews: DailyReportCrew[];
+    photos: DailyReportPhoto[];
+}
+
 export interface ManagedUser {
     id: number;
     name: string;

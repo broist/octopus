@@ -104,6 +104,7 @@ class Modules
             'machines',
             'materials',
             'finance',
+            'daily-reports',
             'scheduling',
             'documents',
             'tasks',

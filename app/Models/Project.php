@@ -161,6 +161,14 @@ class Project extends Model
         return $this->hasMany(ProjectCost::class);
     }
 
+    /**
+     * Napi jelentések / munkanapló-bejegyzések (11. modul), a legfrissebb elöl.
+     */
+    public function dailyReports(): HasMany
+    {
+        return $this->hasMany(DailyReport::class)->orderByDesc('report_date');
+    }
+
     /* ------------------------------------------------------------------ */
     /* Helpers                                                             */
     /* ------------------------------------------------------------------ */
