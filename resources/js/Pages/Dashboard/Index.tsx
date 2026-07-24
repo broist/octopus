@@ -41,6 +41,7 @@ interface DashboardProps extends Record<string, unknown> {
         project: { id: number; code: string } | null;
     }[];
     alerts: { key: string; text: string; project_id: number | null; url?: string | null }[];
+    finance: { revenue: number; actual_cost: number; profit: number; unpaid_invoices: number };
     todayEvents: {
         id: number;
         title: string;
@@ -88,8 +89,11 @@ const EmptyNote = ({ children }: { children: ReactNode }) => (
 );
 
 export default function Dashboard() {
-    const { auth, stats, projects, deadlines, alerts, todayEvents, myTasks, activities } =
+    const { auth, stats, projects, deadlines, alerts, finance, todayEvents, myTasks, activities } =
         usePageProps<DashboardProps>();
+    const canFinance = auth.permissions.includes('finance.view');
+    const huf = new Intl.NumberFormat('hu-HU');
+    const fmtHuf = (v: number) => `${huf.format(Math.round(v))} Ft`;
     const firstName = auth.user?.name?.split(' ')[0] ?? '';
 
     return (
@@ -332,12 +336,44 @@ export default function Dashboard() {
                         )}
                     </Panel>
 
-                    {/* Pénzügyi pillanatkép — a 9. modullal érkezik */}
-                    <Panel title="Pénzügyi pillanatkép">
-                        <EmptyNote>
-                            Kintlévőségek és költségtúllépések — a Pénzügy / Költségvetés (9.)
-                            modul elkészültével jelenik meg.
-                        </EmptyNote>
+                    {/* Pénzügyi pillanatkép (9. modul) */}
+                    <Panel
+                        title="Pénzügyi pillanatkép"
+                        action={
+                            canFinance && (
+                                <Link href={route('finance.index')} className="text-xs font-medium text-accent hover:underline">
+                                    Részletek
+                                </Link>
+                            )
+                        }
+                    >
+                        <dl className="space-y-2 text-sm">
+                            <div className="flex items-center justify-between">
+                                <dt className="text-ink-soft">Bevétel (szerződés / ajánlat)</dt>
+                                <dd className="tabular-nums font-medium text-ink">{fmtHuf(finance.revenue)}</dd>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <dt className="text-ink-soft">Tényleges költség</dt>
+                                <dd className="tabular-nums font-medium text-ink">{fmtHuf(finance.actual_cost)}</dd>
+                            </div>
+                            <div className="flex items-center justify-between border-t border-line pt-2">
+                                <dt className="font-medium text-ink">Eredmény</dt>
+                                <dd
+                                    className={clsx(
+                                        'tabular-nums font-semibold',
+                                        finance.profit < 0 ? 'text-coral' : 'text-emerald-600',
+                                    )}
+                                >
+                                    {fmtHuf(finance.profit)}
+                                </dd>
+                            </div>
+                            {finance.unpaid_invoices > 0 && (
+                                <div className="flex items-center justify-between border-t border-line pt-2 text-ink-soft">
+                                    <dt>Kifizetetlen bejövő számla</dt>
+                                    <dd className="font-medium text-ink">{finance.unpaid_invoices} db</dd>
+                                </div>
+                            )}
+                        </dl>
                     </Panel>
                 </div>
             </div>

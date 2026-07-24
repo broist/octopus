@@ -40,6 +40,7 @@ class Project extends Model
         'client_id',
         'project_manager_id',
         'status',
+        'contract_value',
         'construction_type',
         'location_city',
         'location_address',
@@ -57,6 +58,7 @@ class Project extends Model
             'ends_on' => 'date:Y-m-d',
             'latitude' => 'float',
             'longitude' => 'float',
+            'contract_value' => 'decimal:2',
         ];
     }
 
@@ -133,6 +135,30 @@ class Project extends Model
     public function workLogs(): HasMany
     {
         return $this->hasMany(WorkLog::class);
+    }
+
+    /**
+     * Árajánlatok a projekten (Ajánlatkérő) — a Pénzügy bevétel-oldalához.
+     */
+    public function quotes(): HasMany
+    {
+        return $this->hasMany(Quote::class);
+    }
+
+    /**
+     * Tervezett költségvetési tételek (9. modul).
+     */
+    public function budgetItems(): HasMany
+    {
+        return $this->hasMany(ProjectBudgetItem::class);
+    }
+
+    /**
+     * Tényleges (nem anyag) költségek (9. modul).
+     */
+    public function costs(): HasMany
+    {
+        return $this->hasMany(ProjectCost::class);
     }
 
     /* ------------------------------------------------------------------ */

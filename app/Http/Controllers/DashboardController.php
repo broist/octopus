@@ -7,7 +7,10 @@ use App\Models\Machine;
 use App\Models\MaterialProcurement;
 use App\Models\Project;
 use App\Models\ProjectActivity;
+use App\Models\ProjectBudgetItem;
+use App\Models\ProjectCost;
 use App\Models\ProjectPhase;
+use App\Models\Quote;
 use App\Models\StaffQualification;
 use App\Models\SubcontractorCertification;
 use App\Models\Task;
@@ -217,6 +220,70 @@ class DashboardController extends Controller
             ];
         }
 
+        // Pénzügyi pillanatkép + költségtúllépés (spec §9): projektenkénti bevétel
+        // (szerződéses érték vagy jóváhagyott ajánlat) vs. tényleges költség (anyag
+        // az Anyagok modulból + költség-tételek), az alprojektekkel együtt.
+        $budgetProjects = Project::whereNull('parent_id')->with('subprojects:id,parent_id')
+            ->get(['id', 'code', 'name', 'contract_value']);
+        $budgetIds = $budgetProjects->flatMap(fn ($p) => array_merge([$p->id], $p->subprojects->pluck('id')->all()))->all();
+
+        $financeRevenue = 0.0;
+        $financeActual = 0.0;
+
+        if ($budgetIds !== []) {
+            $matBy = MaterialProcurement::committed()->whereIn('project_id', $budgetIds)
+                ->selectRaw('project_id, sum(quantity * unit_price) as s')->groupBy('project_id')->pluck('s', 'project_id');
+            $costBy = ProjectCost::whereIn('project_id', $budgetIds)
+                ->selectRaw('project_id, sum(amount) as s')->groupBy('project_id')->pluck('s', 'project_id');
+            $budgetBy = ProjectBudgetItem::whereIn('project_id', $budgetIds)
+                ->selectRaw('project_id, sum(amount) as s')->groupBy('project_id')->pluck('s', 'project_id');
+            $quoteBy = Quote::whereIn('project_id', $budgetIds)->where('status', 'jóváhagyva')
+                ->selectRaw('project_id, max(net_offer) as n')->groupBy('project_id')->pluck('n', 'project_id');
+
+            foreach ($budgetProjects as $p) {
+                $ids = array_merge([$p->id], $p->subprojects->pluck('id')->all());
+                $budget = 0.0;
+                $actual = 0.0;
+                $quoteMax = 0.0;
+                foreach ($ids as $id) {
+                    $budget += (float) ($budgetBy[$id] ?? 0);
+                    $actual += (float) ($matBy[$id] ?? 0) + (float) ($costBy[$id] ?? 0);
+                    $quoteMax = max($quoteMax, (float) ($quoteBy[$id] ?? 0));
+                }
+                $revenue = $p->contract_value !== null ? (float) $p->contract_value : $quoteMax;
+                $financeRevenue += $revenue;
+                $financeActual += $actual;
+
+                if ($budget > 0 && $actual > $budget) {
+                    $over = number_format($actual - $budget, 0, ',', ' ');
+                    $alerts[] = [
+                        'key' => "koltseg-tullepes-{$p->id}",
+                        'text' => "{$p->code} – {$p->name}: költségtúllépés (+{$over} Ft)",
+                        'project_id' => $p->id,
+                        'url' => route('finance.show', $p->id),
+                    ];
+                }
+            }
+        }
+
+        $finance = [
+            'revenue' => $financeRevenue,
+            'actual_cost' => $financeActual,
+            'profit' => $financeRevenue - $financeActual,
+            'unpaid_invoices' => ProjectCost::where('is_invoice', true)->where('is_paid', false)->count(),
+        ];
+
+        // Lejárt, kifizetetlen bejövő számlák (spec §9: esedékes kifizetések).
+        $overdueInvoices = ProjectCost::overdueUnpaid()->count();
+        if ($overdueInvoices > 0) {
+            $alerts[] = [
+                'key' => 'lejart-bejovo-szamla',
+                'text' => "{$overdueInvoices} lejárt, kifizetetlen bejövő számla",
+                'project_id' => null,
+                'url' => route('finance.index'),
+            ];
+        }
+
         // --- Mai nap: ki hol dolgozik + saját mai teendők ---
         $todayEvents = CalendarEvent::query()
             ->visibleTo($user)
@@ -273,6 +340,7 @@ class DashboardController extends Controller
             'projects' => $projects,
             'deadlines' => $deadlines->take(7)->values(),
             'alerts' => $alerts,
+            'finance' => $finance,
             'todayEvents' => $todayEvents,
             'myTasks' => $myTasks,
             'activities' => $activities,

@@ -33,6 +33,7 @@ require __DIR__.'/subcontractors.php';
 require __DIR__.'/staff.php';
 require __DIR__.'/machines.php';
 require __DIR__.'/materials.php';
+require __DIR__.'/finance.php';
 require __DIR__.'/scheduling.php';
 require __DIR__.'/documents.php';
 require __DIR__.'/tasks.php';

@@ -537,6 +537,89 @@ export interface DeliveryCalItem {
     project: ProjectRef | null;
 }
 
+// --- Pénzügy / Költségvetés (9. modul) ---
+
+export interface FinanceRow {
+    id: number;
+    code: string;
+    name: string;
+    status: ProjectStatus;
+    client_name: string | null;
+    revenue: number;
+    revenue_from_quote: boolean;
+    budget: number;
+    material_cost: number;
+    actual_cost: number;
+    profit: number;
+    margin: number | null;
+    over_budget: boolean;
+}
+
+export interface FinanceProjectRef {
+    id: number;
+    code: string;
+    name: string;
+    status: ProjectStatus;
+    client_name: string | null;
+    contract_value: number | null;
+}
+
+export interface FinanceSummary {
+    revenue: number;
+    revenue_from_quote: boolean;
+    budget: number;
+    material_cost: number;
+    other_cost: number;
+    actual_cost: number;
+    profit: number;
+    margin: number | null;
+    over_budget: boolean;
+}
+
+export interface FinanceCategoryRow {
+    key: string;
+    label: string;
+    planned: number;
+    actual: number;
+}
+
+export interface BudgetItem {
+    id: number;
+    category: string;
+    category_label: string;
+    description: string;
+    amount: number;
+    project_code: string | null;
+}
+
+export interface CostItem {
+    id: number;
+    category: string;
+    category_label: string;
+    partner_id: number | null;
+    partner_name: string | null;
+    description: string;
+    amount: number;
+    incurred_on: string | null;
+    is_invoice: boolean;
+    due_on: string | null;
+    is_paid: boolean;
+    overdue: boolean;
+    has_file: boolean;
+    file_name: string | null;
+    download_url: string | null;
+    project_code: string | null;
+}
+
+export interface FinanceQuote {
+    id: number;
+    quote_number: string | null;
+    name: string;
+    status: string;
+    net_offer: number;
+    gross_offer: number;
+}
+
 export interface ManagedUser {
     id: number;
     name: string;

@@ -103,6 +103,7 @@ class Modules
             'staff',
             'machines',
             'materials',
+            'finance',
             'scheduling',
             'documents',
             'tasks',
