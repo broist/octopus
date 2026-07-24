@@ -401,6 +401,81 @@ export interface AbsenceCalItem {
     ends_on: string;
 }
 
+// --- Gépek és eszközök (7. modul) ---
+
+export interface MachineListItem {
+    id: number;
+    name: string;
+    kind: string | null;
+    kind_label: string | null;
+    identifier: string | null;
+    status: string;
+    status_label: string;
+    ownership: string;
+    location: string | null;
+    responsible_name: string | null;
+    next_service_on: string | null;
+    inspection_valid_until: string | null;
+    service_status: CertStatus;
+    inspection_status: CertStatus;
+    booked_today: boolean;
+}
+
+export interface MachineDetail extends MachineListItem {
+    manufacture_year: number | null;
+    purchased_on: string | null;
+    ownership_label: string;
+    rental_source: string | null;
+    responsible_user_id: number | null;
+    note: string | null;
+    created_at: string | null;
+}
+
+export interface MachineMaintenance {
+    id: number;
+    type: string;
+    type_label: string;
+    performed_on: string | null;
+    description: string;
+    cost: number | null;
+    has_file: boolean;
+    file_name: string | null;
+    download_url: string | null;
+    creator_name: string | null;
+}
+
+export interface MachineDocument {
+    id: number;
+    category: string;
+    category_label: string;
+    name: string;
+    size_bytes: number;
+    uploader_name: string | null;
+    created_at: string | null;
+    download_url: string;
+}
+
+export interface MachineBooking {
+    id: number;
+    starts_on: string;
+    ends_on: string;
+    note: string | null;
+    is_current: boolean;
+    is_conflicted: boolean;
+    project: { id: number; code: string; name: string; status: ProjectStatus } | null;
+}
+
+/** Gépfoglalás a naptár csak-olvasható rétegében. */
+export interface MachineBookingCalItem {
+    key: string;
+    machine_id: number;
+    machine_name: string | null;
+    starts_on: string;
+    ends_on: string;
+    is_conflicted: boolean;
+    project: ProjectRef | null;
+}
+
 export interface ManagedUser {
     id: number;
     name: string;

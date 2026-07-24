@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CalendarEvent;
+use App\Models\Machine;
 use App\Models\Project;
 use App\Models\ProjectActivity;
 use App\Models\ProjectPhase;
@@ -163,6 +164,33 @@ class DashboardController extends Controller
                 'text' => $text,
                 'project_id' => null,
                 'url' => route('staff.show', $userId),
+            ];
+        }
+
+        // Lejáró/lejárt gép-karbantartás és műszaki vizsga (spec §7: lejárati
+        // figyelmeztetés). Gépenként egy sor, a legközelebbi esedékesség szerint.
+        $expiringMachines = Machine::query()
+            ->where(fn ($q) => $q
+                ->whereDate('next_service_on', '<=', $certHorizon->toDateString())
+                ->orWhereDate('inspection_valid_until', '<=', $certHorizon->toDateString()))
+            ->get();
+
+        foreach ($expiringMachines as $machine) {
+            $items = [];
+            if ($machine->next_service_on && $machine->next_service_on->lte($certHorizon)) {
+                $items[] = $machine->next_service_on->isPast() ? 'lejárt szerviz' : 'esedékes szerviz';
+            }
+            if ($machine->inspection_valid_until && $machine->inspection_valid_until->lte($certHorizon)) {
+                $items[] = $machine->inspection_valid_until->isPast() ? 'lejárt műszaki vizsga' : 'közelgő műszaki vizsga';
+            }
+            if ($items === []) {
+                continue;
+            }
+            $alerts[] = [
+                'key' => "gep-{$machine->id}",
+                'text' => "{$machine->name}: ".implode(', ', $items),
+                'project_id' => null,
+                'url' => route('machines.show', $machine->id),
             ];
         }
 

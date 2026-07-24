@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CalendarEventRequest;
 use App\Models\CalendarEvent;
+use App\Models\MachineBooking;
 use App\Models\Project;
 use App\Models\ProjectPhase;
 use App\Models\StaffAbsence;
@@ -131,6 +132,29 @@ class SchedulingController extends Controller
             ])
             ->values();
 
+        // --- Gépfoglalások (7. modul, csak olvasható réteg, ütközés-jelzéssel) ---
+        $machineBookings = MachineBooking::query()
+            ->overlapping($rangeStart->toDateString(), $rangeEnd->toDateString())
+            ->with(['machine:id,name', 'project:id,code,name'])
+            ->orderBy('starts_on')
+            ->get();
+
+        $conflictedBookings = $this->conflictedMachineBookingIds($machineBookings);
+
+        $machineBookingItems = $machineBookings
+            ->map(fn (MachineBooking $b) => [
+                'key' => "gepfoglalas-{$b->id}",
+                'machine_id' => $b->machine_id,
+                'machine_name' => $b->machine?->name,
+                'starts_on' => $b->starts_on->toDateString(),
+                'ends_on' => $b->ends_on->toDateString(),
+                'is_conflicted' => in_array($b->id, $conflictedBookings, true),
+                'project' => $b->project
+                    ? ['id' => $b->project->id, 'code' => $b->project->code, 'name' => $b->project->name]
+                    : null,
+            ])
+            ->values();
+
         return Inertia::render('Scheduling/Index', [
             'view' => $view,
             'date' => $date->toDateString(),
@@ -156,6 +180,7 @@ class SchedulingController extends Controller
             'milestones' => $milestones,
             'taskItems' => $taskItems,
             'absences' => $absences,
+            'machineBookings' => $machineBookingItems,
             'projects' => Project::orderBy('code')->get(['id', 'code', 'name'])
                 ->map(fn ($p) => ['id' => $p->id, 'code' => $p->code, 'name' => $p->name])->values(),
             'users' => User::where('is_active', true)->where('is_external', false)
@@ -237,6 +262,31 @@ class SchedulingController extends Controller
         }
 
         return array_values(array_unique($conflicted));
+    }
+
+    /**
+     * Gépfoglalás-ütközések: ugyanaz a gép átfedő időszakra van foglalva.
+     *
+     * @param  \Illuminate\Support\Collection<int, MachineBooking>  $bookings
+     * @return array<int, int>
+     */
+    private function conflictedMachineBookingIds($bookings): array
+    {
+        $conflicted = [];
+
+        foreach ($bookings as $a) {
+            foreach ($bookings as $b) {
+                if ($a->id === $b->id || $a->machine_id !== $b->machine_id) {
+                    continue;
+                }
+                if ($a->starts_on->lte($b->ends_on) && $a->ends_on->gte($b->starts_on)) {
+                    $conflicted[$a->id] = $a->id;
+                    break;
+                }
+            }
+        }
+
+        return array_values($conflicted);
     }
 
     /**

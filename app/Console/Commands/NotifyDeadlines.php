@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Machine;
 use App\Models\ProjectPhase;
 use App\Models\StaffQualification;
 use App\Models\SubcontractorCertification;
@@ -189,6 +190,43 @@ class NotifyDeadlines extends Command
                     "/staff/{$qual->user->id}", $key,
                 ));
                 $count += $qualRecipients->count();
+            }
+        }
+
+        // --- Gép karbantartás / műszaki vizsga (30 napos előrejelzés) ---
+        $machineRecipients = User::where('is_active', true)->where('is_external', false)
+            ->permission('machines.edit')->get();
+
+        if ($machineRecipients->isNotEmpty()) {
+            $machines = Machine::query()
+                ->where(fn ($q) => $q
+                    ->whereDate('next_service_on', '<=', $certHorizon)
+                    ->orWhereDate('inspection_valid_until', '<=', $certHorizon))
+                ->get();
+
+            $machineDeadlines = [
+                'szerviz' => ['field' => 'next_service_on', 'label' => 'Szerviz'],
+                'vizsga' => ['field' => 'inspection_valid_until', 'label' => 'Műszaki vizsga'],
+            ];
+
+            foreach ($machines as $machine) {
+                foreach ($machineDeadlines as $slug => $meta) {
+                    $date = $machine->{$meta['field']};
+                    if ($date === null || $date->gt($certHorizon)) {
+                        continue;
+                    }
+                    $overdue = $date->isPast();
+                    $key = "machine-{$machine->id}-{$slug}-{$date->toDateString()}-".($overdue ? 'over' : 'soon');
+                    if ($sent->has($key)) {
+                        continue;
+                    }
+                    $title = "{$machine->name} – {$meta['label']}";
+                    Notification::send($machineRecipients, new DeadlineApproaching(
+                        'gep', $title, $date->toDateString(), $overdue,
+                        "/machines/{$machine->id}", $key,
+                    ));
+                    $count += $machineRecipients->count();
+                }
             }
         }
 

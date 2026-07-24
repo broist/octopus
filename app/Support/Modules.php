@@ -101,6 +101,7 @@ class Modules
             'crm',
             'subcontractors',
             'staff',
+            'machines',
             'scheduling',
             'documents',
             'tasks',
