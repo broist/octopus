@@ -105,6 +105,7 @@ class Modules
             'materials',
             'finance',
             'daily-reports',
+            'qa',
             'scheduling',
             'documents',
             'tasks',

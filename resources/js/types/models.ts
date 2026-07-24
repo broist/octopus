@@ -694,6 +694,114 @@ export interface DailyReportDetail {
     photos: DailyReportPhoto[];
 }
 
+// --- Minőség / Munkavédelem (12. modul) ---
+
+export type DefectStatus = 'nyitott' | 'javitas_alatt' | 'lezart';
+export type DefectSeverity = 'alacsony' | 'kozepes' | 'magas';
+export type InspectionResult = 'nyitott' | 'megfelelt' | 'nem_megfelelt' | 'na';
+
+export interface QaPhoto {
+    id: number;
+    name: string;
+    is_image: boolean;
+    url: string;
+}
+
+export interface DefectItem {
+    id: number;
+    title: string;
+    description: string | null;
+    severity: DefectSeverity;
+    severity_label: string;
+    status: DefectStatus;
+    status_label: string;
+    project: ProjectRef | null;
+    responsible_id: number | null;
+    responsible_name: string | null;
+    due_on: string | null;
+    is_overdue: boolean;
+    inspection: { id: number; title: string } | null;
+    task_id: number | null;
+    task_status: TaskStatus | null;
+    photos_count: number;
+    photos: QaPhoto[];
+}
+
+export interface SafetyRecordItem {
+    id: number;
+    type: string;
+    type_label: string;
+    occurred_on: string;
+    title: string;
+    description: string | null;
+    participants: string | null;
+    project: ProjectRef | null;
+    creator_name: string | null;
+}
+
+export interface ChecklistTemplateRow {
+    id: number;
+    name: string;
+    purpose: string;
+    purpose_label: string;
+    description: string | null;
+    is_active: boolean;
+    items_count: number;
+    inspections_count: number;
+    items: { id: number; text: string }[];
+}
+
+export interface QaTemplateOption {
+    id: number;
+    name: string;
+    purpose: string;
+    items_count: number;
+}
+
+export interface InspectionRow {
+    id: number;
+    title: string;
+    purpose: string;
+    purpose_label: string;
+    inspected_on: string;
+    status: 'folyamatban' | 'lezart';
+    project: ProjectRef | null;
+    template_name: string | null;
+    creator_name: string | null;
+    items_count: number;
+    failed_count: number;
+    defects_count: number;
+}
+
+export interface InspectionItemRow {
+    id: number;
+    text: string;
+    result: InspectionResult;
+    note: string | null;
+}
+
+export interface InspectionDetail {
+    id: number;
+    title: string;
+    purpose: string;
+    purpose_label: string;
+    inspected_on: string;
+    status: 'folyamatban' | 'lezart';
+    note: string | null;
+    project: ProjectRef | null;
+    template_name: string | null;
+    creator_name: string | null;
+    items: InspectionItemRow[];
+    defects: {
+        id: number;
+        title: string;
+        status: DefectStatus;
+        status_label: string;
+        responsible_name: string | null;
+        due_on: string | null;
+    }[];
+}
+
 export interface ManagedUser {
     id: number;
     name: string;
