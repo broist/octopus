@@ -22,6 +22,7 @@ Route::middleware(['auth', 'can:documents.view'])->group(function () {
 
     // Mappák
     Route::post('/folders', [FolderController::class, 'store'])->name('folders.store');
+    Route::post('/folder-templates', [FolderController::class, 'applyTemplate'])->name('folders.template');
     Route::put('/folders/{folder}', [FolderController::class, 'update'])->name('folders.update');
     Route::put('/folders/{folder}/move', [FolderController::class, 'move'])->name('folders.move');
     Route::put('/folders/{folder}/permissions', [FolderController::class, 'permissions'])->name('folders.permissions');

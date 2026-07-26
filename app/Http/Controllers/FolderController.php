@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Folder;
+use App\Support\FolderTemplates;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class FolderController extends Controller
@@ -34,6 +36,64 @@ class FolderController extends Controller
         ]);
 
         return back()->with('success', 'A mappa létrejött.');
+    }
+
+    /**
+     * Kész mappastruktúra létrehozása sablonból (spec §10).
+     *
+     * Újra és újra futtatható: a már meglévő mappákat nem duplikálja, csak a
+     * hiányzókat pótolja — így egy félkész struktúra utólag is kiegészíthető.
+     */
+    public function applyTemplate(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'template' => ['required', 'string'],
+            'parent_id' => ['nullable', 'integer', 'exists:folders,id'],
+            'name' => ['nullable', 'string', 'max:120'],
+        ], [
+            'template.required' => 'Válasszon sablont.',
+        ]);
+
+        abort_unless(FolderTemplates::exists($data['template']), 404);
+
+        $template = FolderTemplates::get($data['template']);
+        $parent = isset($data['parent_id']) ? Folder::findOrFail($data['parent_id']) : null;
+
+        abort_unless(Folder::canCreateIn($request->user(), $parent), 403);
+
+        // A gyökeret igénylő sablonoknál (projekt, dolgozó, alvállalkozó…) a
+        // megadott név lesz a befoglaló mappa; enélkül a sablon alapértelmezése.
+        $rootName = trim((string) ($data['name'] ?? ''));
+        if ($template['root'] !== null && $rootName === '') {
+            $rootName = FolderTemplates::placeholders($template['root']);
+        }
+
+        $created = 0;
+        $existing = 0;
+        $userId = $request->user()->id;
+
+        DB::transaction(function () use ($template, $parent, $rootName, $userId, &$created, &$existing) {
+            $target = $parent;
+
+            if ($template['root'] !== null) {
+                $target = $this->findOrCreate($rootName, $parent?->id, $userId, $created, $existing);
+            }
+
+            $this->createTree(
+                FolderTemplates::resolve($template['tree']),
+                $target?->id,
+                $userId,
+                $created,
+                $existing,
+            );
+        });
+
+        $message = $created > 0
+            ? "A(z) „{$template['label']}” létrehozva: {$created} új mappa"
+                .($existing > 0 ? ", {$existing} már létezett." : '.')
+            : 'Minden mappa már létezett — nem jött létre új.';
+
+        return back()->with($created > 0 ? 'success' : 'info', $message);
     }
 
     /**
@@ -132,6 +192,44 @@ class FolderController extends Controller
         $folder->delete();
 
         return back()->with('success', 'A mappa törölve.');
+    }
+
+    /**
+     * A sablon fájának rekurzív létrehozása a megadott szülő alá.
+     *
+     * @param  array<string, mixed>  $tree
+     */
+    private function createTree(array $tree, ?int $parentId, int $userId, int &$created, int &$existing): void
+    {
+        foreach ($tree as $name => $children) {
+            $folder = $this->findOrCreate((string) $name, $parentId, $userId, $created, $existing);
+            $this->createTree((array) $children, $folder->id, $userId, $created, $existing);
+        }
+    }
+
+    /**
+     * Meglévő mappa keresése (kis-nagybetű független) vagy létrehozása.
+     */
+    private function findOrCreate(string $name, ?int $parentId, int $userId, int &$created, int &$existing): Folder
+    {
+        $folder = Folder::query()
+            ->where('parent_id', $parentId)
+            ->whereRaw('lower(name) = lower(?)', [$name])
+            ->first();
+
+        if ($folder) {
+            $existing++;
+
+            return $folder;
+        }
+
+        $created++;
+
+        return Folder::create([
+            'name' => $name,
+            'parent_id' => $parentId,
+            'created_by' => $userId,
+        ]);
     }
 
     private function ensureUniqueName(string $name, ?int $parentId, ?int $exceptId = null): void

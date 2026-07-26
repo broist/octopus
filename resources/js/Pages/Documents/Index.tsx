@@ -11,6 +11,7 @@ import {
     HardDrive,
     Image as ImageIcon,
     LayoutGrid,
+    LayoutTemplate,
     Lock,
     MoreVertical,
     Pencil,
@@ -27,6 +28,7 @@ import FolderTree from '@/Pages/Documents/Partials/FolderTree';
 import MoveDialog from '@/Pages/Documents/Partials/MoveDialog';
 import NameDialog from '@/Pages/Documents/Partials/NameDialog';
 import PermissionsDialog from '@/Pages/Documents/Partials/PermissionsDialog';
+import TemplateDialog, { type FolderTemplate } from '@/Pages/Documents/Partials/TemplateDialog';
 import UploadDialog from '@/Pages/Documents/Partials/UploadDialog';
 import { usePageProps } from '@/hooks/usePageProps';
 import { fmtBytes, fmtDate } from '@/lib/format';
@@ -57,6 +59,7 @@ interface IndexProps extends Record<string, unknown> {
     users: Option[];
     categories: Record<string, string>;
     projects: ProjectOption[];
+    folderTemplates: FolderTemplate[];
     filters: { search: string; category: string; project: number | null };
     searchMode: boolean;
 }
@@ -81,6 +84,7 @@ export default function Index() {
         users,
         categories,
         projects,
+        folderTemplates,
         filters,
         searchMode,
     } = props;
@@ -124,6 +128,7 @@ export default function Index() {
 
     /* ---------------- dialógusok ---------------- */
     const [newFolderOpen, setNewFolderOpen] = useState(false);
+    const [templateTarget, setTemplateTarget] = useState<{ id: number | null; path: string } | null>(null);
     const [renameTarget, setRenameTarget] = useState<Item | null>(null);
     const [moveTarget, setMoveTarget] = useState<Item | null>(null);
     const [permsTarget, setPermsTarget] = useState<{
@@ -167,6 +172,17 @@ export default function Index() {
             route('folders.store'),
             { name, parent_id: folderId },
             { ...visitOptions, onSuccess: () => setNewFolderOpen(false) },
+        );
+    };
+
+    /** Az aktuális hely útvonala szövegesen (a sablon-dialógus fejlécébe). */
+    const currentPath = breadcrumbs.map((c) => c.name).join(' / ');
+
+    const applyTemplate = (payload: { template: string; name: string | null }) => {
+        router.post(
+            route('folders.template'),
+            { ...payload, parent_id: templateTarget?.id ?? null },
+            { ...visitOptions, onSuccess: () => setTemplateTarget(null) },
         );
     };
 
@@ -255,6 +271,12 @@ export default function Index() {
         if (!item) {
             return [
                 { label: 'Új mappa', icon: FolderPlus, disabled: !can.create, onClick: () => setNewFolderOpen(true) },
+                {
+                    label: 'Mappastruktúra sablonból…',
+                    icon: LayoutTemplate,
+                    disabled: !can.create,
+                    onClick: () => setTemplateTarget({ id: folderId, path: currentPath }),
+                },
                 { label: 'Fájl feltöltése', icon: Upload, disabled: !can.create, onClick: () => fileInput.current?.click() },
             ];
         }
@@ -263,6 +285,13 @@ export default function Index() {
             const row = item.row;
             return [
                 { label: 'Megnyitás', icon: FolderIcon, onClick: () => goto(row.id) },
+                {
+                    label: 'Mappastruktúra sablonból…',
+                    icon: LayoutTemplate,
+                    disabled: !can.create,
+                    onClick: () =>
+                        setTemplateTarget({ id: row.id, path: `${currentPath} / ${row.name}` }),
+                },
                 { label: 'Átnevezés', icon: Pencil, disabled: !can.edit, onClick: () => setRenameTarget(item) },
                 { label: 'Áthelyezés…', icon: FolderInput, disabled: !can.edit, onClick: () => setMoveTarget(item) },
                 {
@@ -371,6 +400,15 @@ export default function Index() {
                     >
                         <FolderPlus size={16} />
                         Új mappa
+                    </button>
+                    <button
+                        className={toolbarBtn}
+                        disabled={!can.create || searchMode}
+                        onClick={() => setTemplateTarget({ id: folderId, path: currentPath })}
+                        title="Kész mappastruktúra létrehozása sablonból"
+                    >
+                        <LayoutTemplate size={16} />
+                        Struktúra
                     </button>
                     <button
                         className={toolbarBtn}
@@ -781,6 +819,16 @@ export default function Index() {
             )}
 
             {/* Dialógusok */}
+            <TemplateDialog
+                open={templateTarget !== null}
+                templates={folderTemplates}
+                targetPath={templateTarget?.path || 'Fájlok'}
+                projects={projects}
+                busy={busy}
+                onSubmit={applyTemplate}
+                onClose={() => setTemplateTarget(null)}
+            />
+
             <NameDialog
                 open={newFolderOpen}
                 title="Új mappa"

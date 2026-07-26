@@ -139,6 +139,7 @@ class DocumentController extends Controller
                 ->orderBy('name')->get(['id', 'name']),
             'categories' => Document::CATEGORIES,
             'projects' => $this->projectOptions(),
+            'folderTemplates' => \App\Support\FolderTemplates::catalogue(),
             'filters' => ['search' => $search, 'category' => $category, 'project' => $projectId ?: null],
             'searchMode' => $searchMode,
         ]);
