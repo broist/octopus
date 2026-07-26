@@ -182,7 +182,7 @@ class DocumentController extends Controller
         DB::transaction(function () use ($data, $names, $folder, $user, $request, &$count) {
             foreach ($request->file('files') as $i => $file) {
                 $mime = $file->getMimeType() ?? '';
-                $category = $data['category']
+                $category = ($data['category'] ?? null)
                     ?: (str_starts_with($mime, 'image/') ? 'foto' : 'egyeb');
                 $disk = Document::diskFor($category, (int) $file->getSize());
 

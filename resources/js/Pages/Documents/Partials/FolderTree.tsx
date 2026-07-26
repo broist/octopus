@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Folder as FolderIcon, HardDrive, Lock } from 'lucide-react';
+import { ChevronRight, Folder as FolderIcon, FolderOpen, HardDrive, Lock } from 'lucide-react';
 import clsx from 'clsx';
 import type { TreeFolder } from '@/types/models';
 
@@ -10,6 +10,13 @@ interface FolderTreeProps {
     /** Ezek nem választhatók (pl. mozgatásnál önmaga + almappái). */
     disabledIds?: number[];
     rootLabel?: string;
+    /** Jobb klikk egy csomóponton (null = gyökér). */
+    onContextMenu?: (id: number | null, e: React.MouseEvent) => void;
+    /** Húzás–ejtés célpont (áthelyezés a fára). */
+    dropTarget?: number | null | 'none';
+    onNodeDragOver?: (id: number | null, e: React.DragEvent) => void;
+    onNodeDragLeave?: () => void;
+    onNodeDrop?: (id: number | null, e: React.DragEvent) => void;
 }
 
 /**
@@ -25,6 +32,11 @@ export default function FolderTree({
     onSelect,
     disabledIds = [],
     rootLabel = 'Fájlok',
+    onContextMenu,
+    dropTarget = 'none',
+    onNodeDragOver,
+    onNodeDragLeave,
+    onNodeDrop,
 }: FolderTreeProps) {
     const childrenOf = useMemo(() => {
         const map = new Map<number | null, TreeFolder[]>();
@@ -66,21 +78,34 @@ export default function FolderTree({
             return next;
         });
 
+    const dropProps = (id: number | null) =>
+        onNodeDrop
+            ? {
+                  onDragOver: (e: React.DragEvent) => onNodeDragOver?.(id, e),
+                  onDragLeave: () => onNodeDragLeave?.(),
+                  onDrop: (e: React.DragEvent) => onNodeDrop(id, e),
+              }
+            : {};
+
     const renderLevel = (parentId: number | null, depth: number) => {
         const nodes = childrenOf.get(parentId) ?? [];
         return nodes.map((node) => {
             const disabled = disabledIds.includes(node.id);
             const hasChildren = (childrenOf.get(node.id) ?? []).length > 0;
             const isOpen = expanded.has(node.id);
+            const isSelected = selectedId === node.id;
 
             return (
                 <div key={node.id}>
                     <div
+                        {...dropProps(node.id)}
+                        onContextMenu={(e) => onContextMenu?.(node.id, e)}
                         className={clsx(
-                            'flex items-center rounded-md transition',
-                            selectedId === node.id
+                            'flex items-center rounded-[4px] transition',
+                            isSelected
                                 ? 'bg-accent-50 text-accent-700'
                                 : 'text-ink-soft hover:bg-cream hover:text-ink',
+                            dropTarget === node.id && 'bg-accent-50 ring-1 ring-accent/50',
                         )}
                         style={{ paddingLeft: `${depth * 12}px` }}
                     >
@@ -92,7 +117,7 @@ export default function FolderTree({
                                     e.stopPropagation();
                                     toggle(node.id);
                                 }}
-                                className="shrink-0 rounded p-0.5 text-ink-faint hover:text-ink"
+                                className="shrink-0 rounded-[3px] p-0.5 text-ink-faint hover:bg-line/60 hover:text-ink"
                             >
                                 <ChevronRight
                                     size={13}
@@ -106,21 +131,31 @@ export default function FolderTree({
                             type="button"
                             disabled={disabled}
                             onClick={() => onSelect(node.id)}
+                            onDoubleClick={() => hasChildren && toggle(node.id)}
                             className={clsx(
-                                'flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-left text-sm',
-                                selectedId === node.id && 'font-medium',
+                                'flex min-w-0 flex-1 items-center gap-2 py-1 pr-2 text-left text-[13px]',
+                                isSelected && 'font-medium',
                                 disabled && 'cursor-not-allowed opacity-40',
                             )}
                         >
-                            <FolderIcon
-                                size={15}
-                                className="shrink-0 text-[#E8B04B]"
-                                fill="#F3CE84"
-                                strokeWidth={1.5}
-                            />
+                            {isOpen ? (
+                                <FolderOpen
+                                    size={15}
+                                    className="shrink-0 text-[#E8B04B]"
+                                    fill="#F3CE84"
+                                    strokeWidth={1.5}
+                                />
+                            ) : (
+                                <FolderIcon
+                                    size={15}
+                                    className="shrink-0 text-[#E8B04B]"
+                                    fill="#F3CE84"
+                                    strokeWidth={1.5}
+                                />
+                            )}
                             <span className="truncate">{node.name}</span>
                             {node.is_restricted && (
-                                <Lock size={11} className="ml-auto shrink-0 text-ink-faint" />
+                                <Lock size={11} className="ml-auto shrink-0 text-amberwarn" />
                             )}
                         </button>
                     </div>
@@ -132,19 +167,28 @@ export default function FolderTree({
 
     return (
         <div className="space-y-0.5">
-            <button
-                type="button"
-                onClick={() => onSelect(null)}
+            <div
+                {...dropProps(null)}
+                onContextMenu={(e) => onContextMenu?.(null, e)}
                 className={clsx(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition',
-                    selectedId === null
-                        ? 'bg-accent-50 font-medium text-accent-700'
-                        : 'text-ink-soft hover:bg-cream hover:text-ink',
+                    'rounded-[4px]',
+                    dropTarget === null && onNodeDrop && 'bg-accent-50 ring-1 ring-accent/50',
                 )}
             >
-                <HardDrive size={15} className="shrink-0 text-ink-faint" />
-                <span>{rootLabel}</span>
-            </button>
+                <button
+                    type="button"
+                    onClick={() => onSelect(null)}
+                    className={clsx(
+                        'flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-[13px] transition',
+                        selectedId === null
+                            ? 'bg-accent-50 font-medium text-accent-700'
+                            : 'text-ink-soft hover:bg-cream hover:text-ink',
+                    )}
+                >
+                    <HardDrive size={15} className="shrink-0 text-ink-faint" />
+                    <span>{rootLabel}</span>
+                </button>
+            </div>
             {renderLevel(null, 0)}
         </div>
     );

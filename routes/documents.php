@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentVersionController;
+use App\Http\Controllers\FileOpsController;
 use App\Http\Controllers\FolderController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +28,10 @@ Route::middleware(['auth', 'can:documents.view'])->group(function () {
     Route::put('/folders/{folder}/move', [FolderController::class, 'move'])->name('folders.move');
     Route::put('/folders/{folder}/permissions', [FolderController::class, 'permissions'])->name('folders.permissions');
     Route::delete('/folders/{folder}', [FolderController::class, 'destroy'])->name('folders.destroy');
+
+    // Intéző-műveletek: tulajdonságok adatlap + tömeges (többkijelölés, vágólap)
+    Route::get('/file-ops/properties', [FileOpsController::class, 'properties'])->name('file-ops.properties');
+    Route::post('/file-ops/bulk', [FileOpsController::class, 'bulk'])->name('file-ops.bulk');
 
     // Fájl áthelyezése
     Route::put('/documents/{document}/move', [DocumentController::class, 'move'])->name('documents.move');
