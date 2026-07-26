@@ -38,12 +38,24 @@ export interface ItemCalc {
     profit: number;
     margin: number;
     markup: number;
+    /**
+     * A tétel anyag-, illetve munkadíj-összára (mennyiség × egységár) a
+     * választott alap (saját / alvállalkozói) szerint. Ez csak a `base`
+     * MEGBONTÁSA megjelenítéshez — a két szám összege pontosan a költségalap.
+     * Manuális alapnál nincs értelmezhető bontás, ezért null.
+     */
+    materialTotal: number | null;
+    laborTotal: number | null;
 }
 
 export function calcItem(quote: QuoteData, category: QuoteCategory, item: QuoteItem): ItemCalc {
     const qty = num(item.quantity);
-    const ownCost = eround(qty * num(item.ownMaterialUnit)) + eround(qty * num(item.ownLaborUnit));
-    const subCost = eround(qty * num(item.subMaterialUnit)) + eround(qty * num(item.subLaborUnit));
+    const ownMaterial = eround(qty * num(item.ownMaterialUnit));
+    const ownLabor = eround(qty * num(item.ownLaborUnit));
+    const subMaterial = eround(qty * num(item.subMaterialUnit));
+    const subLabor = eround(qty * num(item.subLaborUnit));
+    const ownCost = ownMaterial + ownLabor;
+    const subCost = subMaterial + subLabor;
 
     const base =
         item.basis === 'sub'
@@ -70,6 +82,8 @@ export function calcItem(quote: QuoteData, category: QuoteCategory, item: QuoteI
         profit,
         margin: offer ? (profit / offer) * 100 : 0,
         markup: base ? (profit / base) * 100 : 0,
+        materialTotal: item.basis === 'manual' ? null : item.basis === 'sub' ? subMaterial : ownMaterial,
+        laborTotal: item.basis === 'manual' ? null : item.basis === 'sub' ? subLabor : ownLabor,
     };
 }
 

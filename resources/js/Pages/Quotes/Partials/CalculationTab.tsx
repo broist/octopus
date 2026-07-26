@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ChevronDown,
     Copy,
+    Info,
     Plus,
     Trash2,
 } from 'lucide-react';
@@ -37,6 +38,81 @@ const PROFIT_MODES: { value: ProfitMode; label: string }[] = [
     { value: 'multiplier', label: 'Szorzó' },
     { value: 'fixed', label: 'Fix végösszeg' },
 ];
+
+/**
+ * Súgószövegek a globális haszonkulcs / korrekció mezőkhöz: mi is ez pontosan,
+ * és mire érdemes állítani. Az ⓘ jelre víve az egeret (érintőn rákoppintva)
+ * jelenik meg.
+ */
+const FIELD_HELP: Record<string, string> = {
+    profitMode:
+        'Hogyan képződik az ajánlati ár a költségalapból. „Haszonkulcs %”: a költségre rátett felár '
+        + '(25% → 100 000 Ft költségből 125 000 Ft ár). „Szorzó”: a költség szorzása (1,25 = +25%). '
+        + '„Fix végösszeg”: az ár kötött, a költségtől függetlenül. Alap esetben a Haszonkulcs % a jó választás.',
+    profitValue:
+        'A fenti módhoz tartozó szám: százaléknál a felár (pl. 25,1), szorzónál a szorzószám (pl. 1,251), '
+        + 'fix módban a végösszeg forintban. Ez az egész ajánlatra érvényes — munkanem- vagy tétel-szinten felülírható.',
+    vatRate:
+        'A nettó ajánlati árra számított áfakulcs. Általános kulcs: 27. Új lakóingatlan értékesítésénél lehet 5 — '
+        + 'ha nem vagy biztos benne, hagyd 27-en. A nyereséget nem befolyásolja, csak a bruttó árat.',
+    discount:
+        'Egy összegben adott engedmény, ami LEVONÓDIK a nettó árból. Közvetlenül a nyereséget csökkenti, '
+        + 'ezért csak tudatosan add meg. Ha nincs kedvezmény, hagyd 0-n.',
+    contingency:
+        'Előre nem látható munkákra betervezett puffer, ami HOZZÁADÓDIK a nettó árhoz. Bizonytalan terjedelmű '
+        + 'munkánál szokásosan a költségalap 5–10%-a; jól körülhatárolt munkánál 0.',
+    projectCost:
+        'Projektszintű költség, ami egyik tételhez sem rendelhető: felvonulás, konténer, ideiglenes áram, '
+        + 'művezetés, takarítás. Hozzáadódik a nettó árhoz. Ha ezeket tételként vitted fel, hagyd 0-n.',
+    rounding:
+        'Kézi kerekítés a végösszegen: pozitív és negatív érték is megadható (pl. −2 383 Ft, hogy kerek szám '
+        + 'jöjjön ki). Közvetlenül a nettó árhoz adódik, ezért a nyereséget is ennyivel mozdítja. Ha nem kerekítesz, 0.',
+};
+
+/**
+ * Kis ⓘ jel súgóbuborékkal. Egérrel rámutatva megjelenik, érintőképernyőn
+ * (iPad) koppintásra kinyílik és nyitva marad, amíg máshova nem koppintasz.
+ */
+function InfoTip({ text }: { text: string }) {
+    const [hover, setHover] = useState(false);
+    const [pinned, setPinned] = useState(false);
+    const ref = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+        if (!pinned) return;
+        const onPointerDown = (e: PointerEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setPinned(false);
+        };
+        document.addEventListener('pointerdown', onPointerDown);
+        return () => document.removeEventListener('pointerdown', onPointerDown);
+    }, [pinned]);
+
+    const open = hover || pinned;
+
+    return (
+        <span ref={ref} className="relative inline-flex">
+            <button
+                type="button"
+                aria-label="Mi ez?"
+                aria-expanded={open}
+                onClick={() => setPinned((p) => !p)}
+                onMouseEnter={() => setHover(true)}
+                onMouseLeave={() => setHover(false)}
+                className="rounded-full text-ink-faint transition hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+                <Info size={14} />
+            </button>
+            {open && (
+                <span
+                    role="tooltip"
+                    className="absolute left-1/2 top-6 z-30 w-64 -translate-x-1/2 rounded-card border border-line bg-white p-2.5 text-xs font-normal leading-relaxed text-ink-soft shadow-card"
+                >
+                    {text}
+                </span>
+            )}
+        </span>
+    );
+}
 
 function Num({
     value,
@@ -147,7 +223,7 @@ export default function CalculationTab({
                     Globális haszonkulcs és korrekciók
                 </h2>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    <Field label="Haszonkulcs módja">
+                    <Field label="Haszonkulcs módja" info={FIELD_HELP.profitMode}>
                         <select
                             className={clsx(selCls, 'w-full')}
                             value={data.globalProfitMode}
@@ -161,7 +237,7 @@ export default function CalculationTab({
                             ))}
                         </select>
                     </Field>
-                    <Field label="Haszonkulcs értéke">
+                    <Field label="Haszonkulcs értéke" info={FIELD_HELP.profitValue}>
                         <Num
                             className="w-full"
                             value={data.globalProfitValue}
@@ -169,7 +245,7 @@ export default function CalculationTab({
                             onChange={(n) => setField('globalProfitValue', n)}
                         />
                     </Field>
-                    <Field label="ÁFA (%)">
+                    <Field label="ÁFA (%)" info={FIELD_HELP.vatRate}>
                         <Num
                             className="w-full"
                             value={data.vatRate}
@@ -177,7 +253,7 @@ export default function CalculationTab({
                             onChange={(n) => setField('vatRate', n)}
                         />
                     </Field>
-                    <Field label="Kedvezmény (Ft)">
+                    <Field label="Kedvezmény (Ft)" info={FIELD_HELP.discount}>
                         <Num
                             className="w-full"
                             value={data.discount}
@@ -185,7 +261,7 @@ export default function CalculationTab({
                             onChange={(n) => setField('discount', n)}
                         />
                     </Field>
-                    <Field label="Tartalékkeret (Ft)">
+                    <Field label="Tartalékkeret (Ft)" info={FIELD_HELP.contingency}>
                         <Num
                             className="w-full"
                             value={data.contingency}
@@ -193,7 +269,7 @@ export default function CalculationTab({
                             onChange={(n) => setField('contingency', n)}
                         />
                     </Field>
-                    <Field label="Projektköltség (Ft)">
+                    <Field label="Projektköltség (Ft)" info={FIELD_HELP.projectCost}>
                         <Num
                             className="w-full"
                             value={data.projectCost}
@@ -201,7 +277,7 @@ export default function CalculationTab({
                             onChange={(n) => setField('projectCost', n)}
                         />
                     </Field>
-                    <Field label="Kerekítés (Ft)">
+                    <Field label="Kerekítés (Ft)" info={FIELD_HELP.rounding}>
                         <Num
                             className="w-full"
                             value={data.rounding}
@@ -394,22 +470,24 @@ function CategoryCard({
 
                     {/* Tételtábla — saját vízszintes görgetéssel */}
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[720px] border-collapse text-sm">
+                        <table className="w-full min-w-[1080px] border-collapse text-sm">
                             <thead>
                                 <tr className="border-b border-line bg-cream/60 text-left text-[11px] uppercase tracking-wide text-ink-faint">
-                                    <th className="px-2 py-2 font-semibold">Megnevezés</th>
+                                    <th className="min-w-[20rem] px-2 py-2 font-semibold">Megnevezés</th>
                                     <th className="px-2 py-2 text-right font-semibold">Menny.</th>
                                     <th className="px-2 py-2 font-semibold">Egys.</th>
-                                    <th className="px-2 py-2 text-right font-semibold">Saját anyag e.ár</th>
-                                    <th className="px-2 py-2 text-right font-semibold">Saját díj e.ár</th>
+                                    <th className="px-2 py-2 text-right font-semibold">Anyag e.ár</th>
+                                    <th className="px-2 py-2 text-right font-semibold">Munkadíj e.ár</th>
                                     {!compact && (
                                         <>
-                                            <th className="px-2 py-2 text-right font-semibold">Alváll. anyag</th>
-                                            <th className="px-2 py-2 text-right font-semibold">Alváll. díj</th>
+                                            <th className="px-2 py-2 text-right font-semibold">Alváll. anyag e.ár</th>
+                                            <th className="px-2 py-2 text-right font-semibold">Alváll. díj e.ár</th>
                                         </>
                                     )}
                                     <th className="px-2 py-2 font-semibold">Alap</th>
-                                    <th className="px-2 py-2 text-right font-semibold">Költségalap</th>
+                                    <th className="px-2 py-2 text-right font-semibold">Anyag ö.ár</th>
+                                    <th className="px-2 py-2 text-right font-semibold">Munkadíj ö.ár</th>
+                                    <th className="px-2 py-2 text-right font-semibold">Összesen (anyag+díj)</th>
                                     <th className="px-2 py-2 text-right font-semibold">Ajánlati ár</th>
                                     {!compact && (
                                         <th className="px-2 py-2 text-right font-semibold">Árrés</th>
@@ -429,10 +507,11 @@ function CategoryCard({
                                                 !item.active && 'bg-cream/40 text-ink-faint',
                                             )}
                                         >
-                                            <td className="px-2 py-1.5" style={{ minWidth: 220 }}>
+                                            <td className="px-2 py-1.5" style={{ minWidth: 320 }}>
                                                 <input
                                                     className={clsx(inputCls, 'text-xs')}
                                                     value={item.description}
+                                                    title={item.description}
                                                     disabled={readOnly}
                                                     onChange={(e) =>
                                                         setItem(ci, ii, { description: e.target.value })
@@ -447,9 +526,9 @@ function CategoryCard({
                                                     onChange={(n) => setItem(ci, ii, { quantity: n })}
                                                 />
                                             </td>
-                                            <td className="px-2 py-1.5">
+                                            <td className="px-2 py-1.5" style={{ minWidth: 96 }}>
                                                 <input
-                                                    className={clsx(inputCls, 'w-16 text-xs')}
+                                                    className={clsx(inputCls, 'text-sm')}
                                                     value={item.unit}
                                                     disabled={readOnly}
                                                     onChange={(e) => setItem(ci, ii, { unit: e.target.value })}
@@ -520,6 +599,12 @@ function CategoryCard({
                                                 )}
                                             </td>
                                             <td className="px-2 py-1.5 text-right tabular-nums text-ink-soft">
+                                                {c.materialTotal === null ? '—' : fmtHuf(c.materialTotal)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-ink-soft">
+                                                {c.laborTotal === null ? '—' : fmtHuf(c.laborTotal)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right tabular-nums text-ink-soft">
                                                 {fmtHuf(c.base)}
                                             </td>
                                             <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-ink">
@@ -564,7 +649,10 @@ function CategoryCard({
                                 })}
                                 {category.items.length === 0 && (
                                     <tr>
-                                        <td colSpan={12} className="px-3 py-4 text-center text-sm text-ink-faint">
+                                        <td
+                                            colSpan={11 + (compact ? 0 : 3) + (readOnly ? 0 : 1)}
+                                            className="px-3 py-4 text-center text-sm text-ink-faint"
+                                        >
                                             Nincs tétel ebben a munkanemben.
                                         </td>
                                     </tr>
@@ -590,10 +678,25 @@ function CategoryCard({
     );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+    label,
+    info,
+    children,
+}: {
+    label: string;
+    info?: string;
+    children: React.ReactNode;
+}) {
     return (
         <div>
-            <InputLabel value={label} />
+            {info ? (
+                <span className="mb-1 flex items-center gap-1">
+                    <InputLabel value={label} className="mb-0" />
+                    <InfoTip text={info} />
+                </span>
+            ) : (
+                <InputLabel value={label} />
+            )}
             {children}
         </div>
     );
