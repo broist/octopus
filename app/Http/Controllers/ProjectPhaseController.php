@@ -22,6 +22,8 @@ class ProjectPhaseController extends Controller
         $phase = $project->phases()->create([
             ...collect($data)->except(['depends_on', 'resources'])->all(),
             'sort_order' => ((int) $project->phases()->max('sort_order')) + 1,
+            // Csúszás-elemzéshez (spec §15): a tényleges befejezés dátuma.
+            'completed_on' => ((int) ($data['progress'] ?? 0)) === 100 ? today() : null,
         ]);
 
         $phase->dependencies()->sync($deps);
@@ -44,8 +46,13 @@ class ProjectPhaseController extends Controller
         $phase->dependencies()->sync($deps);
         $this->syncResources($phase, $data['resources'] ?? []);
 
+        // A tényleges befejezés dátuma (csúszás-elemzés, spec §15): a 100%-ra
+        // váltás napja. Ha a készültség visszaesik, a dátum törlődik.
         if (! $wasDone && $phase->progress === 100) {
+            $phase->update(['completed_on' => today()]);
             $project->logActivity('fazis', "Fázis elkészült: {$phase->name}");
+        } elseif ($wasDone && $phase->progress < 100) {
+            $phase->update(['completed_on' => null]);
         }
 
         return back()->with('success', 'A fázis módosítva.');

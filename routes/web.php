@@ -36,6 +36,7 @@ require __DIR__.'/materials.php';
 require __DIR__.'/finance.php';
 require __DIR__.'/daily-reports.php';
 require __DIR__.'/qa.php';
+require __DIR__.'/reports.php';
 require __DIR__.'/scheduling.php';
 require __DIR__.'/documents.php';
 require __DIR__.'/tasks.php';

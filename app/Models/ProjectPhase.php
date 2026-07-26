@@ -28,6 +28,7 @@ class ProjectPhase extends Model
         'due_on',
         'work_days',
         'progress',
+        'completed_on',
         'note',
     ];
 
@@ -36,6 +37,7 @@ class ProjectPhase extends Model
         return [
             'starts_on' => 'date:Y-m-d',
             'due_on' => 'date:Y-m-d',
+            'completed_on' => 'date:Y-m-d',
             'progress' => 'integer',
             'work_days' => 'integer',
         ];

@@ -106,6 +106,7 @@ class Modules
             'finance',
             'daily-reports',
             'qa',
+            'reports',
             'scheduling',
             'documents',
             'tasks',
