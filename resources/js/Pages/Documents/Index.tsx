@@ -45,6 +45,7 @@ import {
     type UploadEntry,
     entriesFromDrop,
     entriesFromFiles,
+    looksLikeFolder,
 } from '@/Pages/Documents/Partials/upload';
 import {
     type ClipboardState,
@@ -197,6 +198,7 @@ export default function Index() {
     const [upload, setUpload] = useState<{
         entries: UploadEntry[];
         folderId: number | null;
+        notice?: string;
     } | null>(null);
     const [confirm, setConfirm] = useState<{
         title: string;
@@ -233,10 +235,29 @@ export default function Index() {
         folderInput.current?.setAttribute('directory', '');
     }, []);
 
-    const onFilesPicked = (list: FileList | null) => {
+    /**
+     * A választott fájlok/mappa átvétele. Mappa-forrásnál üres eredménynél is
+     * megnyitjuk a párbeszédet indoklással — a néma elhalás azt a látszatot
+     * kelti, hogy „nem történik semmi”.
+     */
+    const onFilesPicked = (list: FileList | null, source: 'file' | 'folder' = 'file') => {
         const entries = entriesFromFiles(list);
+
         if (entries.length > 0) {
             setUpload({ entries, folderId });
+
+            return;
+        }
+
+        if (source === 'folder') {
+            setUpload({
+                entries: [],
+                folderId,
+                notice:
+                    'A kiválasztott mappában nem található feltölthető fájl. Ha a mappa nem üres, '
+                    + 'elképzelhető, hogy a fájlok csak a felhőben vannak (OneDrive „csak online” '
+                    + 'állapot) — nyissa meg őket egyszer, hogy helyben is elérhetők legyenek.',
+            });
         }
     };
 
@@ -452,29 +473,16 @@ export default function Index() {
         },
     ];
 
-    const newSubmenu = (targetId: number | null, path: string): MenuEntry[] => [
+    /** Feltöltés-menüpontok: a parancssáv gombja és az „Új” menü is ezt mutatja. */
+    const uploadSubmenu = (): MenuEntry[] => [
         {
-            label: 'Mappa',
-            icon: FolderPlus,
-            shortcut: 'Ctrl+Shift+N',
-            disabled: !can.create,
-            onClick: () => setNewFolderIn({ id: targetId }),
-        },
-        {
-            label: 'Mappastruktúra sablonból…',
-            icon: LayoutTemplate,
-            disabled: !can.create,
-            onClick: () => setTemplateTarget({ id: targetId, path }),
-        },
-        { separator: true },
-        {
-            label: 'Fájl feltöltése…',
+            label: 'Fájlok feltöltése…',
             icon: Upload,
             disabled: !can.create,
             onClick: () => fileInput.current?.click(),
         },
         {
-            label: 'Mappa feltöltése…',
+            label: 'Mappa feltöltése (almappákkal)…',
             icon: FolderUp,
             disabled: !can.create,
             onClick: () => folderInput.current?.click(),
@@ -495,6 +503,24 @@ export default function Index() {
                   },
               ] as MenuEntry[])
             : []),
+    ];
+
+    const newSubmenu = (targetId: number | null, path: string): MenuEntry[] => [
+        {
+            label: 'Mappa',
+            icon: FolderPlus,
+            shortcut: 'Ctrl+Shift+N',
+            disabled: !can.create,
+            onClick: () => setNewFolderIn({ id: targetId }),
+        },
+        {
+            label: 'Mappastruktúra sablonból…',
+            icon: LayoutTemplate,
+            disabled: !can.create,
+            onClick: () => setTemplateTarget({ id: targetId, path }),
+        },
+        { separator: true },
+        ...uploadSubmenu(),
     ];
 
     /** Üres területre (háttérre) nyíló menü — mint az Intéző mappa-háttere. */
@@ -709,9 +735,36 @@ export default function Index() {
         // Az operációs rendszerből behúzott fájlok/mappák: a mappákat
         // almappástul bejárjuk (a DataTransfer csak szinkron olvasható).
         if (e.dataTransfer.types.includes('Files')) {
-            void entriesFromDrop(e.dataTransfer).then((entries) => {
-                if (entries.length > 0) setUpload({ entries, folderId: targetId });
-            });
+            void entriesFromDrop(e.dataTransfer)
+                .then((entries) => {
+                    const folderLike = entries.filter((entry) => looksLikeFolder(entry.file));
+                    const usable = entries.filter((entry) => ! looksLikeFolder(entry.file));
+
+                    if (usable.length > 0) {
+                        setUpload({ entries: usable, folderId: targetId });
+
+                        return;
+                    }
+
+                    setUpload({
+                        entries: [],
+                        folderId: targetId,
+                        notice: folderLike.length > 0
+                            ? 'Ez a böngésző nem adja át a behúzott mappa tartalmát. Használja a '
+                                + '„Feltöltés ▾ → Mappa feltöltése (almappákkal)…” gombot.'
+                            : 'A behúzott elemekből nem sikerült fájlt beolvasni (üres mappa, vagy '
+                                + 'a fájlok csak a felhőben érhetők el).',
+                    });
+                })
+                .catch((err: unknown) =>
+                    setUpload({
+                        entries: [],
+                        folderId: targetId,
+                        notice: 'Nem sikerült beolvasni a behúzott elemeket: '
+                            + ((err as Error)?.message ?? 'ismeretlen hiba')
+                            + '. Próbálja a „Feltöltés ▾ → Mappa feltöltése (almappákkal)…” gombot.',
+                    }),
+                );
 
             return;
         }
@@ -1042,7 +1095,7 @@ export default function Index() {
                 multiple
                 className="hidden"
                 onChange={(e) => {
-                    onFilesPicked(e.target.files);
+                    onFilesPicked(e.target.files, 'folder');
                     e.target.value = '';
                 }}
             />
@@ -1101,6 +1154,7 @@ export default function Index() {
                     selectionCount={selected.size}
                     clipboardCount={clipboard?.items.length ?? 0}
                     onNewMenu={(e) => openBarMenu(e, newSubmenu(folderId, currentPath))}
+                    onUploadMenu={(e) => openBarMenu(e, uploadSubmenu())}
                     onSortMenu={(e) => openBarMenu(e, sortSubmenu())}
                     onViewMenu={(e) => openBarMenu(e, viewSubmenu())}
                     onMoreMenu={(e) => openBarMenu(e, moreMenu())}
@@ -1392,6 +1446,7 @@ export default function Index() {
             <UploadDialog
                 open={upload !== null}
                 entries={upload?.entries ?? []}
+                notice={upload?.notice}
                 folderId={upload?.folderId ?? null}
                 categories={categories}
                 projects={projects}

@@ -16,6 +16,8 @@ import type { ProjectOption } from '@/types/models';
 interface UploadDialogProps {
     open: boolean;
     entries: UploadEntry[];
+    /** Magyarázat, ha a választásból nem jött össze feltölthető fájl. */
+    notice?: string;
     folderId: number | null;
     categories: Record<string, string>;
     projects: ProjectOption[];
@@ -70,6 +72,7 @@ function errorText(err: unknown): string {
 export default function UploadDialog({
     open,
     entries: incoming,
+    notice,
     folderId,
     categories,
     projects,
@@ -222,11 +225,18 @@ export default function UploadDialog({
                         </div>
                     ) : (
                         <>
-                            <p className="mt-1 text-xs text-ink-faint">
-                                {structured
-                                    ? 'A mappaszerkezet a feltöltéssel együtt jön létre; a már meglévő mappákba a fájlok bekerülnek.'
-                                    : 'A név átírható – a fájl ezzel a névvel jelenik meg és tölthető le. A kiterjesztés változatlan marad.'}
-                            </p>
+                            {notice ? (
+                                <p className="mt-2 flex items-start gap-2 rounded-md border border-amberwarn/30 bg-amberwarn/10 px-3 py-2 text-xs text-[#8a5e17]">
+                                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                                    <span>{notice}</span>
+                                </p>
+                            ) : (
+                                <p className="mt-1 text-xs text-ink-faint">
+                                    {structured
+                                        ? 'A mappaszerkezet a feltöltéssel együtt jön létre; a már meglévő mappákba a fájlok bekerülnek.'
+                                        : 'A név átírható – a fájl ezzel a névvel jelenik meg és tölthető le. A kiterjesztés változatlan marad.'}
+                                </p>
+                            )}
 
                             {oversized.length > 0 && (
                                 <p className="mt-2 flex items-start gap-2 rounded-md border border-amberwarn/30 bg-amberwarn/10 px-3 py-2 text-xs text-[#8a5e17]">

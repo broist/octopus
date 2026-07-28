@@ -68,53 +68,71 @@ function readDir(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> 
 async function walk(entry: FileSystemEntry, prefix: string, out: UploadEntry[]): Promise<void> {
     if (out.length >= MAX_ENTRIES) return;
 
-    if (entry.isFile) {
-        const file = await readFile(entry as FileSystemFileEntry);
-        if (file) out.push({ file, path: prefix });
+    // Egyetlen olvashatatlan elem (jogosultság, felhőben tárolt OneDrive-fájl,
+    // böngésző-hiba) ne vigye magával az egész mappát.
+    try {
+        if (entry.isFile) {
+            const file = await readFile(entry as FileSystemFileEntry);
+            if (file) out.push({ file, path: prefix });
 
-        return;
-    }
-
-    if (!entry.isDirectory) return;
-
-    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    const reader = (entry as FileSystemDirectoryEntry).createReader();
-
-    for (;;) {
-        const batch = await readDir(reader);
-        if (batch.length === 0) break;
-
-        for (const child of batch) {
-            await walk(child, path, out);
+            return;
         }
+
+        if (!entry.isDirectory) return;
+
+        const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const reader = (entry as FileSystemDirectoryEntry).createReader();
+
+        for (;;) {
+            const batch = await readDir(reader);
+            if (batch.length === 0) break;
+
+            for (const child of batch) {
+                await walk(child, path, out);
+            }
+        }
+    } catch {
+        /* ezt az ágat kihagyjuk, a többi mehet tovább */
     }
 }
 
 /**
  * Ejtett elemek begyűjtése. A mappákat a webkitGetAsEntry API-val járjuk be —
  * ezt SZINKRON módon kell kiolvasni, mert a DataTransfer az esemény után
- * érvénytelen (ezért van az első `await` előtt).
+ * érvénytelen (ezért van minden kiolvasás az első `await` ELŐTT).
  */
 export async function entriesFromDrop(dt: DataTransfer): Promise<UploadEntry[]> {
     const roots: FileSystemEntry[] = [];
 
     if (dt.items) {
         for (const item of Array.from(dt.items)) {
-            const entry = item.kind === 'file' ? item.webkitGetAsEntry?.() : null;
+            // Nem szűrünk `kind`-ra: a webkitGetAsEntry úgyis null-t ad
+            // mindenre, ami nem fájlrendszeri elem.
+            const entry = item.webkitGetAsEntry?.() ?? null;
             if (entry) roots.push(entry);
         }
     }
 
-    // Régi böngésző vagy nem fájlrendszeri forrás: marad a lapos fájllista.
-    if (roots.length === 0) return entriesFromFiles(dt.files);
+    // Tartalék a lapos fájllistából (régi böngésző, vagy ha a bejárás elhasal).
+    const flat = entriesFromFiles(dt.files);
+
+    if (roots.length === 0) return flat;
 
     const out: UploadEntry[] = [];
     for (const root of roots) {
         await walk(root, '', out);
     }
 
-    return out;
+    return out.length > 0 ? out : flat;
 }
+
+/**
+ * Mappának látszó „fájl”: az ejtett mappa a régi (bejárás nélküli) ágon 0
+ * bájtos, típus és kiterjesztés nélküli fájlként érkezne — ezt jelezzük, nem
+ * töltjük fel.
+ */
+export const looksLikeFolder = (file: File): boolean =>
+    file.size === 0 && file.type === '' && ! /\.[^./\\]+$/.test(file.name);
 
 /* ------------------------------------------------------------------ */
 /* Szakaszolás                                                          */

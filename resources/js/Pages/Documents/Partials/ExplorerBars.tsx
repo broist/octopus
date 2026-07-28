@@ -19,6 +19,7 @@ import {
     Scissors,
     Search,
     Trash2,
+    Upload,
     X,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -258,6 +259,7 @@ interface CommandBarProps {
     selectionCount: number;
     clipboardCount: number;
     onNewMenu: (e: React.MouseEvent) => void;
+    onUploadMenu: (e: React.MouseEvent) => void;
     onSortMenu: (e: React.MouseEvent) => void;
     onViewMenu: (e: React.MouseEvent) => void;
     onMoreMenu: (e: React.MouseEvent) => void;
@@ -283,6 +285,7 @@ export function CommandBar({
     selectionCount,
     clipboardCount,
     onNewMenu,
+    onUploadMenu,
     onSortMenu,
     onViewMenu,
     onMoreMenu,
@@ -305,6 +308,17 @@ export function CommandBar({
             >
                 <Plus size={16} className="text-accent" />
                 Új
+                <ChevronRight size={12} className="rotate-90 text-ink-faint" />
+            </button>
+
+            <button
+                className={cmdBtn}
+                disabled={!can.create || searchMode}
+                onClick={onUploadMenu}
+                title="Fájlok vagy egy teljes mappa feltöltése"
+            >
+                <Upload size={15} />
+                Feltöltés
                 <ChevronRight size={12} className="rotate-90 text-ink-faint" />
             </button>
 
