@@ -13,10 +13,12 @@ export default function Edit({
     calendarSync,
     calendarToken,
     calendarTokenDevice,
+    calendarProfileUrl,
 }: {
     calendarSync: CalendarSyncProps;
     calendarToken?: string | null;
     calendarTokenDevice?: string | null;
+    calendarProfileUrl?: string | null;
 }) {
     return (
         <>
@@ -35,6 +37,7 @@ export default function Edit({
                     sync={calendarSync}
                     token={calendarToken}
                     tokenDevice={calendarTokenDevice}
+                    profileUrl={calendarProfileUrl}
                 />
             </div>
         </>

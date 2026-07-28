@@ -8,6 +8,7 @@ use App\Support\CalendarCollections;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response as ResponseFactory;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -77,12 +78,17 @@ class CalendarSyncController extends Controller
     }
 
     /**
-     * Apple konfigurációs profil letöltése.
+     * Apple konfigurációs profil előkészítése.
+     *
+     * Két lépésre bontva, mert a fájlt visszaadó választ az iOS beépített
+     * böngészője ÚJRAKÜLDI GET-tel, hogy átadhassa a rendszer letöltőjének —
+     * a POST-ra épülő letöltés ezért a telefonon 405-tel elhasalt. Így a
+     * módosítás marad CSRF-védett POST, a letöltés pedig sima GET.
      *
      * Minden letöltéshez FRISS kulcsot adunk ki: a fájl nyílt szöveggel
      * tartalmazza, ezért nem szabad újra felhasználni egy korábbit.
      */
-    public function mobileconfig(Request $request, AppleCalendarProfile $profiles): Response
+    public function mobileconfig(Request $request, AppleCalendarProfile $profiles): RedirectResponse
     {
         $user = $request->user();
         abort_unless($user->can('scheduling.view'), 403);
@@ -93,9 +99,34 @@ class CalendarSyncController extends Controller
 
         [, $token] = CalendarCredential::issue($user, $data['name']);
 
-        return ResponseFactory::make($profiles->build($user, $data['name'], $token), 200, [
+        // A kész fájl a munkamenetben vár a letöltésre, egyszeri kulccsal. A
+        // kulcs kitalálhatatlan, a tartalom sosem kerül lemezre, és az első
+        // letöltés után megsemmisül.
+        $key = Str::random(40);
+
+        $request->session()->put("calendar_profile.{$key}", [
+            'file' => $profiles->fileName($data['name']),
+            'body' => $profiles->build($user, $data['name'], $token),
+        ]);
+
+        return back()
+            ->with('success', 'A konfigurációs profil elkészült.')
+            ->with('calendar_profile_url', route('profile.calendar-sync.profile', $key))
+            ->with('calendar_token_device', $data['name']);
+    }
+
+    /**
+     * A előkészített profil kiadása — egyszer használatos.
+     */
+    public function profile(Request $request, string $key): Response
+    {
+        $payload = $request->session()->pull("calendar_profile.{$key}");
+
+        abort_if($payload === null, 410, 'Ez a letöltési hivatkozás már felhasználódott. Kérj újat a Profil oldalon.');
+
+        return ResponseFactory::make($payload['body'], 200, [
             'Content-Type' => 'application/x-apple-aspen-config; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="'.$profiles->fileName($data['name']).'"',
+            'Content-Disposition' => 'attachment; filename="'.$payload['file'].'"',
             // A fájl hitelesítő adatot tartalmaz — sem böngésző, sem proxy
             // ne tárolja el.
             'Cache-Control' => 'no-store, no-cache, must-revalidate, private',

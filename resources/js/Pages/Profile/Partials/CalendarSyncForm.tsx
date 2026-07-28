@@ -4,6 +4,7 @@ import {
     CalendarClock,
     Check,
     Copy,
+    Download,
     Smartphone,
     Trash2,
     TriangleAlert,
@@ -51,15 +52,18 @@ export default function CalendarSyncForm({
     sync,
     token,
     tokenDevice,
+    profileUrl,
 }: {
     sync: CalendarSyncProps;
     token?: string | null;
     tokenDevice?: string | null;
+    profileUrl?: string | null;
 }) {
     const [copied, setCopied] = useState(false);
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
     });
+    const profileForm = useForm({ name: 'iPhone' });
 
     if (!sync.enabled) {
         return null;
@@ -70,6 +74,13 @@ export default function CalendarSyncForm({
         post('/profile/calendar-sync', {
             preserveScroll: true,
             onSuccess: () => reset(),
+        });
+    };
+
+    const prepareProfile: FormEventHandler = (e) => {
+        e.preventDefault();
+        profileForm.post('/profile/calendar-sync/mobileconfig', {
+            preserveScroll: true,
         });
     };
 
@@ -146,35 +157,44 @@ export default function CalendarSyncForm({
                     </div>
                 </div>
 
-                {/* Sima űrlap, nem Inertia: a válasz letöltendő fájl. */}
-                <form
-                    method="post"
-                    action="/profile/calendar-sync/mobileconfig"
-                    className="mt-3 flex flex-wrap items-end gap-2"
-                >
-                    <input
-                        type="hidden"
-                        name="_token"
-                        value={
-                            document
-                                .querySelector('meta[name="csrf-token"]')
-                                ?.getAttribute('content') ?? ''
-                        }
-                    />
+                <form onSubmit={prepareProfile} className="mt-3 flex flex-wrap items-end gap-2">
                     <div className="w-56">
                         <InputLabel htmlFor="mobileconfig_name" value="Eszköz neve" />
                         <TextInput
                             id="mobileconfig_name"
-                            name="name"
-                            defaultValue="iPhone"
-                            required
+                            value={profileForm.data.name}
+                            onChange={(e) => profileForm.setData('name', e.target.value)}
                             maxLength={100}
                         />
+                        <InputError message={profileForm.errors.name} />
                     </div>
-                    <button type="submit" className="btn-primary">
-                        Profil letöltése
+                    <button
+                        type="submit"
+                        className="btn-primary"
+                        disabled={profileForm.processing}
+                    >
+                        Profil előkészítése
                     </button>
                 </form>
+
+                {/* A letöltés sima hivatkozás (GET): az iOS beépített böngészője
+                    a fájlt visszaadó POST-választ újraküldi GET-tel, ezért a
+                    közvetlen POST-os letöltés a telefonon elhasalna. */}
+                {profileUrl && (
+                    <div className="mt-3 rounded-lg border border-accent/40 bg-accent-50/60 p-3">
+                        <p className="text-sm font-medium text-ink">
+                            A profil elkészült
+                        </p>
+                        <p className="mt-1 text-xs text-ink-soft">
+                            Koppints a letöltésre, majd a telefon Beállításaiban
+                            telepítsd. A hivatkozás <strong>egyszer</strong> használható.
+                        </p>
+                        <a href={profileUrl} className="btn-primary mt-2 inline-flex">
+                            <Download size={16} />
+                            <span className="ml-1.5">Profil letöltése</span>
+                        </a>
+                    </div>
+                )}
             </div>
 
             {/* Kézi beállítás (Android / egyéb kliens) */}
