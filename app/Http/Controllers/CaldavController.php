@@ -76,12 +76,15 @@ class CaldavController extends Controller
     }
 
     /**
-     * Feliratkozásos ICS-elérés a `webcal://` kliensekhez — a felfedezést az
-     * iOS és a macOS a jól ismert útvonalon kezdi.
+     * Fiók-felfedezés: az iOS és a macOS a jól ismert útvonalon kezdi, ezért
+     * elég a szerver nevét megadni a telefonon.
+     *
+     * A záró perjel szándékosan marad rajta — a Laravel `redirect()`-je
+     * levágná, egyes CalDAV-kliensek viszont könyvtárként várják az útvonalat.
      */
     public function wellKnown(): RedirectResponse
     {
-        return redirect(self::BASE_URI, 301);
+        return new RedirectResponse(self::BASE_URI, 301);
     }
 
     private function toSabreRequest(Request $request): SabreRequest

@@ -29,7 +29,9 @@ class AuthBackend extends AbstractBasic
     {
         $this->clientIp = $clientIp;
         $this->principalPrefix = 'principals/';
-        $this->realm = 'Octopus naptár';
+        // A HTTP-fejlécek csak ASCII-t bírnak el megbízhatóan, ezért ékezet
+        // nélkül — ez a szöveg jelenik meg a telefon jelszókérő ablakában.
+        $this->realm = 'Octopus';
     }
 
     protected function validateUserPass($username, $password): bool
