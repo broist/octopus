@@ -96,13 +96,49 @@ async function walk(entry: FileSystemEntry, prefix: string, out: UploadEntry[]):
     }
 }
 
+/* -------- újabb API: File System Access (getAsFileSystemHandle) --------- */
+
+/** A böngésző mappa-leírója (a TS DOM-típusai közt még nem mindenhol van meg). */
+interface HandleLike {
+    kind: 'file' | 'directory';
+    name: string;
+    getFile?: () => Promise<File>;
+    values?: () => AsyncIterableIterator<HandleLike>;
+}
+
+async function walkHandle(handle: HandleLike, prefix: string, out: UploadEntry[]): Promise<void> {
+    if (out.length >= MAX_ENTRIES) return;
+
+    try {
+        if (handle.kind === 'file') {
+            const file = await handle.getFile?.();
+            if (file) out.push({ file, path: prefix });
+
+            return;
+        }
+
+        const path = prefix ? `${prefix}/${handle.name}` : handle.name;
+        const children = handle.values?.();
+        if (!children) return;
+
+        for await (const child of children) {
+            await walkHandle(child, path, out);
+        }
+    } catch {
+        /* ezt az ágat kihagyjuk, a többi mehet tovább */
+    }
+}
+
 /**
- * Ejtett elemek begyűjtése. A mappákat a webkitGetAsEntry API-val járjuk be —
- * ezt SZINKRON módon kell kiolvasni, mert a DataTransfer az esemény után
- * érvénytelen (ezért van minden kiolvasás az első `await` ELŐTT).
+ * Ejtett elemek begyűjtése. A mappákat előbb a régebbi webkitGetAsEntry, majd
+ * — ha az nem hozott semmit — az újabb File System Access API-val járjuk be;
+ * végül marad a lapos fájllista. Mindhárom forrás kiolvasása SZINKRON módon
+ * történik (az első `await` ELŐTT), mert a DataTransfer az esemény után
+ * érvénytelen.
  */
 export async function entriesFromDrop(dt: DataTransfer): Promise<UploadEntry[]> {
     const roots: FileSystemEntry[] = [];
+    const handles: Promise<HandleLike | null>[] = [];
 
     if (dt.items) {
         for (const item of Array.from(dt.items)) {
@@ -110,17 +146,30 @@ export async function entriesFromDrop(dt: DataTransfer): Promise<UploadEntry[]> 
             // mindenre, ami nem fájlrendszeri elem.
             const entry = item.webkitGetAsEntry?.() ?? null;
             if (entry) roots.push(entry);
+
+            const asHandle = (item as DataTransferItem & {
+                getAsFileSystemHandle?: () => Promise<HandleLike | null>;
+            }).getAsFileSystemHandle;
+
+            if (typeof asHandle === 'function') {
+                handles.push(asHandle.call(item).catch(() => null));
+            }
         }
     }
 
     // Tartalék a lapos fájllistából (régi böngésző, vagy ha a bejárás elhasal).
     const flat = entriesFromFiles(dt.files);
 
-    if (roots.length === 0) return flat;
-
     const out: UploadEntry[] = [];
+
     for (const root of roots) {
         await walk(root, '', out);
+    }
+
+    if (out.length === 0 && handles.length > 0) {
+        for (const handle of await Promise.all(handles)) {
+            if (handle) await walkHandle(handle, '', out);
+        }
     }
 
     return out.length > 0 ? out : flat;

@@ -257,8 +257,10 @@ export default function Index() {
 
         const folderNotice = folderLike.length > 0
             ? `A böngésző ${folderLike.length} mappát (${names}${folderLike.length > 3 ? ' …' : ''}) `
-                + 'a tartalma nélkül adott át, ezért kimaradt. Mappához használja a '
-                + '„Feltöltés ▾ → Mappa feltöltése (almappákkal)…” gombot.'
+                + 'a tartalma nélkül adott át, ezért kimaradt. Mappát a '
+                + '„Feltöltés ▾ → Mappa feltöltése (almappákkal)…” gombbal tud feltölteni: ott azt '
+                + 'az EGY mappát válassza ki, amelyik ezeket tartalmazza — a benne lévő almappák és '
+                + 'fájlok mind feltöltődnek, a szerkezetükkel együtt.'
             : undefined;
 
         setUpload({
