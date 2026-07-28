@@ -11,6 +11,8 @@ use App\Services\CalendarFeed;
 use App\Services\CalendarIcs;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Sabre\CalDAV\CalendarRoot;
 use Sabre\CalDAV\Plugin as CalDavPlugin;
 use Sabre\CalDAV\Principal\Collection as PrincipalCollection;
@@ -69,10 +71,44 @@ class CaldavController extends Controller
         try {
             $server->start();
         } finally {
+            $email = $auth->authenticatedUser()?->email;
             CalendarContext::clear();
         }
 
-        return $this->toLaravelResponse($capture->response ?? $server->httpResponse);
+        $response = $this->toLaravelResponse($capture->response ?? $server->httpResponse);
+
+        $this->logMutation($request, $response, $email ?? null);
+
+        return $response;
+    }
+
+    /**
+     * A telefon felől érkező módosítások naplózása.
+     *
+     * Csak az írásokat naplózzuk (a lekérdezéseket nem — azok percenként
+     * futnak), mert a szinkron-hibáknál kívülről nem látszik, mit küldött
+     * valójában a telefon: elküldte-e egyáltalán a törlést, és mit kapott rá.
+     */
+    private function logMutation(Request $request, Response $response, ?string $email): void
+    {
+        $method = $request->getMethod();
+
+        if (in_array($method, ['GET', 'HEAD', 'OPTIONS', 'PROPFIND', 'REPORT'], true)) {
+            return;
+        }
+
+        $status = $response->getStatusCode();
+
+        Log::log($status >= 400 ? 'warning' : 'info', 'CalDAV '.$method, [
+            'path' => $request->getPathInfo(),
+            'user' => $email,
+            'status' => $status,
+            'agent' => $request->userAgent(),
+            // Hiba esetén a sabre a válasz XML-jébe teszi az okot.
+            'reason' => $status >= 400
+                ? Str::limit(strip_tags($response->getContent() ?: ''), 300)
+                : null,
+        ]);
     }
 
     /**
