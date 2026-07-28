@@ -81,6 +81,13 @@ class User extends Authenticatable
         return $this->hasMany(StaffAbsence::class)->orderByDesc('starts_on');
     }
 
+    // --- Naptár-szinkron (3. modul, CalDAV) ---
+
+    public function calendarCredentials(): HasMany
+    {
+        return $this->hasMany(CalendarCredential::class)->orderByDesc('created_at');
+    }
+
     /**
      * Belső munkatársak (nem külső portál-felhasználók) — a Staff modul köre.
      */

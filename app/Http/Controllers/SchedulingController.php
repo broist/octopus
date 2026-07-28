@@ -16,6 +16,7 @@ use App\Support\Staff;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -237,6 +238,7 @@ class SchedulingController extends Controller
         ]);
 
         $event->assignees()->sync($data['assignees'] ?? []);
+        $this->touchForSync($event);
 
         return back()->with('success', 'A naptárbejegyzés létrejött.')
             ->with('info', $this->conflictWarning($event));
@@ -249,6 +251,7 @@ class SchedulingController extends Controller
         $data = $request->validated();
         $event->update(collect($data)->except('assignees')->all());
         $event->assignees()->sync($data['assignees'] ?? []);
+        $this->touchForSync($event);
 
         return back()->with('success', 'A naptárbejegyzés módosítva.')
             ->with('info', $this->conflictWarning($event));
@@ -264,9 +267,19 @@ class SchedulingController extends Controller
     }
 
     /**
+     * A CalDAV-ETag az updated_at-ból származik, a résztvevők viszont
+     * kapcsolótáblában vannak — a sync() önmagában nem érinti a bejegyzést.
+     * E nélkül a telefon nem venné észre, ha CSAK a résztvevők változtak.
+     */
+    private function touchForSync(CalendarEvent $event): void
+    {
+        $event->touch();
+    }
+
+    /**
      * Beosztás-ütközések: ugyanaz a személy egyszerre két helyen.
      *
-     * @param  \Illuminate\Support\Collection<int, CalendarEvent>  $events
+     * @param  Collection<int, CalendarEvent>  $events
      * @return array<int, int>
      */
     private function conflictedEventIds($events): array
@@ -298,7 +311,7 @@ class SchedulingController extends Controller
     /**
      * Gépfoglalás-ütközések: ugyanaz a gép átfedő időszakra van foglalva.
      *
-     * @param  \Illuminate\Support\Collection<int, MachineBooking>  $bookings
+     * @param  Collection<int, MachineBooking>  $bookings
      * @return array<int, int>
      */
     private function conflictedMachineBookingIds($bookings): array

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Str;
 
 class CalendarEvent extends Model
 {
@@ -27,6 +28,9 @@ class CalendarEvent extends Model
         'location',
         'note',
         'created_by',
+        'uid',
+        'caldav_uri',
+        'raw_ics',
     ];
 
     protected function casts(): array
@@ -35,6 +39,40 @@ class CalendarEvent extends Model
             'starts_on' => 'date:Y-m-d',
             'ends_on' => 'date:Y-m-d',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Minden bejegyzésnek van iCalendar UID-je, akkor is, ha az Octopus
+        // felületén jött létre — enélkül nem tudnánk kiadni a telefonnak.
+        static::creating(function (self $event) {
+            $event->uid ??= (string) Str::uuid().'@octopus';
+        });
+    }
+
+    /**
+     * CalDAV ETag: a kliens ebből tudja, változott-e a bejegyzés.
+     *
+     * Az updated_at-ból származik, mert azt az Eloquent minden mentésnél
+     * frissíti — így nincs külön karbantartandó oszlop, ami elavulhatna.
+     * A résztvevők pivot-táblás módosítása nem érinti az updated_at-ot,
+     * ezért a szinkronizálás után ott külön touch() kell.
+     */
+    public function etag(): string
+    {
+        return '"'.md5($this->id.'|'.($this->updated_at?->getTimestamp() ?? 0)).'"';
+    }
+
+    /**
+     * A CalDAV-ban kiadott fájlnév.
+     *
+     * Telefonról érkezett bejegyzésnél a kliens által választott nevet
+     * használjuk — a CalDAV-ban a fájlnév a kliens tulajdona, és nem
+     * feltétlenül egyezik a UID-del.
+     */
+    public function calendarObjectName(): string
+    {
+        return $this->caldav_uri ?: $this->uid.'.ics';
     }
 
     public function project(): BelongsTo
