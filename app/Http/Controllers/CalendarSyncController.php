@@ -7,6 +7,7 @@ use App\Services\AppleCalendarProfile;
 use App\Support\CalendarCollections;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Response as ResponseFactory;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,6 +20,12 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class CalendarSyncController extends Controller
 {
+    /**
+     * Meddig él a letöltő hivatkozás. Elég idő a telefonra átvinni, de a
+     * naptár-jelszót tartalmazó fájl ne heverjen sokáig kiadhatóan.
+     */
+    private const PROFILE_TTL = 900;
+
     /**
      * A Profil oldal naptár-szekciójának adatai.
      *
@@ -99,15 +106,18 @@ class CalendarSyncController extends Controller
 
         [, $token] = CalendarCredential::issue($user, $data['name']);
 
-        // A kész fájl a munkamenetben vár a letöltésre, egyszeri kulccsal. A
-        // kulcs kitalálhatatlan, a tartalom sosem kerül lemezre, és az első
-        // letöltés után megsemmisül.
+        // A kész fájl a gyorsítótárban vár a letöltésre, egyszer használatos
+        // kulcs alatt. Szándékosan NEM a munkamenetben: a telefon a profilfájl
+        // letöltését átadja a rendszernek, az pedig már nem viszi magával a
+        // munkamenet-sütit — így a letöltés belépést kérne és elhasalna.
+        // A kulcs maga a jogosultság (mint egy jelszó-visszaállító link):
+        // kitalálhatatlan, egyszer használható, és rövid idő után lejár.
         $key = Str::random(40);
 
-        $request->session()->put("calendar_profile.{$key}", [
+        Cache::put("calendar-profile:{$key}", [
             'file' => $profiles->fileName($data['name']),
             'body' => $profiles->build($user, $data['name'], $token),
-        ]);
+        ], self::PROFILE_TTL);
 
         return back()
             ->with('success', 'A konfigurációs profil elkészült.')
@@ -116,13 +126,13 @@ class CalendarSyncController extends Controller
     }
 
     /**
-     * A előkészített profil kiadása — egyszer használatos.
+     * Az előkészített profil kiadása — egyszer használatos, belépés nélkül.
      */
-    public function profile(Request $request, string $key): Response
+    public function profile(string $key): Response
     {
-        $payload = $request->session()->pull("calendar_profile.{$key}");
+        $payload = Cache::pull("calendar-profile:{$key}");
 
-        abort_if($payload === null, 410, 'Ez a letöltési hivatkozás már felhasználódott. Kérj újat a Profil oldalon.');
+        abort_if($payload === null, 410, 'Ez a letöltési hivatkozás lejárt vagy már felhasználódott. Kérj újat a Profil oldalon.');
 
         return ResponseFactory::make($payload['body'], 200, [
             'Content-Type' => 'application/x-apple-aspen-config; charset=utf-8',
