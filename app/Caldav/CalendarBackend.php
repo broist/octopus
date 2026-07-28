@@ -48,26 +48,22 @@ class CalendarBackend extends AbstractBackend
             return [];
         }
 
-        $calendars = [];
-
-        foreach (CalendarCollections::ALL as $key => $meta) {
-            $calendars[] = [
-                'id' => [$user->id, $key],
-                'uri' => $key,
+        return $this->feed->collections($user)
+            ->map(fn (array $meta) => [
+                'id' => [$user->id, $meta['key']],
+                'uri' => $meta['key'],
                 'principaluri' => $principalUri,
                 '{DAV:}displayname' => $meta['name'],
                 '{urn:ietf:params:xml:ns:caldav}calendar-description' => $meta['description'],
                 '{urn:ietf:params:xml:ns:caldav}calendar-timezone' => null,
                 '{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set' => new SupportedCalendarComponentSet(['VEVENT']),
                 '{http://apple.com/ns/ical/}calendar-color' => $meta['color'],
-                '{http://calendarserver.org/ns/}getctag' => $this->ctag([$user->id, $key]),
+                '{http://calendarserver.org/ns/}getctag' => $this->ctag([$user->id, $meta['key']]),
                 // A sabre ebből építi az ACL-t: a telefon így már a felületen
                 // sem kínálja fel a szerkesztést, nem csak hibára fut.
                 '{http://sabredav.org/ns}read-only' => ! $meta['writable'],
-            ];
-        }
-
-        return $calendars;
+            ])
+            ->all();
     }
 
     public function createCalendar($principalUri, $calendarUri, array $properties): void
@@ -169,17 +165,36 @@ class CalendarBackend extends AbstractBackend
 
         $user = $this->user($userId);
         $attributes = $this->parse($calendarData);
+        $projectId = CalendarCollections::projectId($collection);
 
-        $uid = $attributes['uid'] ?: null;
+        // Naptárak közti mozgatásnál a telefon nem MOVE-ot küld, hanem az új
+        // naptárba PUT-ot és a régiből DELETE-et — tetszőleges sorrendben.
+        // Ha tehát már létezik ilyen bejegyzés, ez áthelyezés, nem ütközés:
+        // a projektjét igazítjuk a cél-naptárhoz, a típusát viszont nem
+        // bántjuk (egy beosztás a telefonon se váljon személyessé).
+        $existing = $this->findByObjectName($attributes['uid'] ?: null, $objectUri);
 
-        if ($uid !== null && CalendarEvent::where('uid', $uid)->exists()) {
-            throw new Conflict('Ezzel az azonosítóval már létezik naptárbejegyzés.');
+        if ($existing !== null) {
+            if (! $existing->canBeManagedBy($user)) {
+                throw new Conflict('Ezzel az azonosítóval már létezik naptárbejegyzés.');
+            }
+
+            unset($attributes['uid']);
+            $existing->fill($attributes);
+            $existing->project_id = $projectId;
+            $existing->caldav_uri = $objectUri;
+            $existing->save();
+
+            $this->forget($calendarId);
+
+            return $existing->fresh()->etag();
         }
 
         $event = CalendarEvent::create([
             ...$attributes,
-            'uid' => $uid,
+            'uid' => $attributes['uid'] ?: null,
             'type' => 'szemelyes',
+            'project_id' => $projectId,
             'caldav_uri' => $objectUri,
             'created_by' => $user->id,
         ]);
@@ -208,6 +223,13 @@ class CalendarBackend extends AbstractBackend
         return $event->fresh()->etag();
     }
 
+    /**
+     * Naptárak közti áthelyezésnél a telefon a régi naptárból is töröl. Ha a
+     * bejegyzés már átkerült, a sabre 404-gyel válaszol, mielőtt ide jutnánk —
+     * ez a helyes végállapot (az adott naptárban tényleg nincs ott), és a
+     * kliensek így is értelmezik. Az áthelyezés maga a createCalendarObject
+     * felismerésén múlik, nem ezen.
+     */
     public function deleteCalendarObject($calendarId, $objectUri): void
     {
         $event = $this->writableEvent($calendarId, $objectUri);
@@ -252,6 +274,25 @@ class CalendarBackend extends AbstractBackend
     }
 
     /**
+     * Bejegyzés keresése a CalDAV-azonosítói alapján, naptártól függetlenül.
+     *
+     * A telefonon készült bejegyzést a kliens által választott fájlnév, az
+     * Octopusban készültet a UID azonosítja.
+     */
+    private function findByObjectName(?string $uid, string $objectUri): ?CalendarEvent
+    {
+        return CalendarEvent::query()
+            ->where(function ($q) use ($uid, $objectUri) {
+                $q->where('caldav_uri', $objectUri);
+
+                if ($uid !== null && $uid !== '') {
+                    $q->orWhere('uid', $uid);
+                }
+            })
+            ->first();
+    }
+
+    /**
      * A kollekció tartalma fájlnév szerint indexelve.
      *
      * @return Collection<string, array{uri: string, etag: string, lastmodified: int, payload: CalendarEvent|CalendarFeedItem}>
@@ -267,10 +308,13 @@ class CalendarBackend extends AbstractBackend
 
         $user = $this->user($userId);
 
-        $rows = match ($collection) {
-            CalendarCollections::PERSONAL => $this->fromEvents($this->feed->personalEvents($user)),
-            CalendarCollections::WORK => $this->fromEvents($this->feed->workEvents($user)),
-            CalendarCollections::DEADLINES => $this->fromFeedItems($this->feed->deadlineItems($user)),
+        $projectId = CalendarCollections::projectId($collection);
+
+        $rows = match (true) {
+            $collection === CalendarCollections::PERSONAL => $this->fromEvents($this->feed->personalEvents($user)),
+            $collection === CalendarCollections::WORK => $this->fromEvents($this->feed->workEvents($user)),
+            $collection === CalendarCollections::DEADLINES => $this->fromFeedItems($this->feed->deadlineItems($user)),
+            $projectId !== null => $this->fromEvents($this->feed->projectEvents($user, $projectId)),
             default => collect(),
         };
 

@@ -10,6 +10,7 @@ use App\Models\ProjectPhase;
 use App\Models\StaffAbsence;
 use App\Models\Task;
 use App\Models\User;
+use App\Support\CalendarCollections;
 use App\Support\Materials;
 use App\Support\Staff;
 use Carbon\CarbonImmutable;
@@ -33,32 +34,107 @@ class CalendarFeed
 
     private const MONTHS_AHEAD = 24;
 
-    /** Csak a saját személyes bejegyzések — teljesen szerkeszthető. */
+    /**
+     * A telefonon megjelenő naptárak leírói: három rögzített, plusz
+     * projektenként egy. A CalDAV-backend és a Profil oldal is ebből dolgozik.
+     *
+     * @return Collection<int, array{key: string, name: string, description: string, color: string, writable: bool, creatable: bool}>
+     */
+    public function collections(User $user): Collection
+    {
+        $fixed = collect(CalendarCollections::FIXED)
+            ->map(fn (array $meta, string $key) => ['key' => $key, ...$meta])
+            ->values();
+
+        $projects = $this->activeProjects()->map(fn (Project $project) => [
+            'key' => CalendarCollections::projectKey($project->id),
+            // A fiók neve a telefonon már „Octopus”, ezért itt a projekt
+            // azonosítója a hasznos információ, nem az ismételt márkanév.
+            'name' => trim($project->code.' · '.$project->name),
+            'description' => 'A projekt bejegyzései. Ide mentve a telefonon is ehhez a projekthez rendelődik.',
+            'color' => CalendarCollections::projectColor($project->id),
+            'writable' => true,
+            'creatable' => true,
+        ]);
+
+        return $fixed->concat($projects)->values();
+    }
+
+    /**
+     * A telefonon megjelenő projektek: minden, ami nincs lezárva.
+     *
+     * @return Collection<int, Project>
+     */
+    public function activeProjects(): Collection
+    {
+        return Project::query()
+            ->where('status', '!=', 'lezart')
+            ->orderBy('code')
+            ->get(['id', 'code', 'name', 'status']);
+    }
+
+    /**
+     * Saját, projekthez NEM kötött bejegyzések.
+     *
+     * A projekthez kötöttek a projekt saját naptárában jelennek meg — egy
+     * bejegyzés pontosan egy naptárban szerepelhet, különben a telefon
+     * duplán mutatná.
+     */
     public function personalEvents(User $user): Collection
     {
         return CalendarEvent::query()
             ->where('type', 'szemelyes')
             ->where('created_by', $user->id)
+            ->whereNull('project_id')
             ->whereBetween('starts_on', $this->window())
             ->with(['project:id,code,name', 'assignees:id,name'])
             ->get();
     }
 
     /**
-     * Munkanaptár: a rám beosztott munkák, plusz a mindenkit érintő
-     * (résztvevő nélküli) céges események.
+     * Munkanaptár: a rám beosztott, projekthez nem kötött munkák, plusz a
+     * mindenkit érintő (résztvevő nélküli) céges események.
      */
     public function workEvents(User $user): Collection
     {
         return CalendarEvent::query()
             ->whereIn('type', ['beosztas', 'szallitas', 'esemeny'])
+            ->whereNull('project_id')
+            ->whereBetween('starts_on', $this->window())
+            ->where(fn ($q) => $this->scopeToUser($q, $user))
+            ->with(['project:id,code,name', 'assignees:id,name'])
+            ->get();
+    }
+
+    /**
+     * Egy projekt naptára: minden hozzá tartozó bejegyzés, amit a felhasználó
+     * amúgy is látna — a saját személyes bejegyzései és a rá tartozó munkák.
+     */
+    public function projectEvents(User $user, int $projectId): Collection
+    {
+        return CalendarEvent::query()
+            ->where('project_id', $projectId)
             ->whereBetween('starts_on', $this->window())
             ->where(function ($q) use ($user) {
-                $q->whereHas('assignees', fn ($a) => $a->where('users.id', $user->id))
-                    ->orWhereDoesntHave('assignees');
+                $q->where(fn ($own) => $own
+                    ->where('type', 'szemelyes')
+                    ->where('created_by', $user->id))
+                    ->orWhere(fn ($work) => $work
+                        ->whereIn('type', ['beosztas', 'szallitas', 'esemeny'])
+                        ->where(fn ($v) => $this->scopeToUser($v, $user)));
             })
             ->with(['project:id,code,name', 'assignees:id,name'])
             ->get();
+    }
+
+    /**
+     * Rám tartozik-e: be vagyok osztva, vagy mindenkinek szól.
+     */
+    private function scopeToUser($query, User $user)
+    {
+        return $query
+            ->whereHas('assignees', fn ($a) => $a->where('users.id', $user->id))
+            ->orWhereDoesntHave('assignees');
     }
 
     /**

@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CalendarCredential;
 use App\Services\AppleCalendarProfile;
-use App\Support\CalendarCollections;
+use App\Services\CalendarFeed;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,14 +40,13 @@ class CalendarSyncController extends Controller
             'enabled' => $user->can('scheduling.view'),
             'serverUrl' => rtrim((string) config('app.url'), '/').'/caldav/',
             'username' => $user->email,
-            'calendars' => collect(CalendarCollections::ALL)
-                ->map(fn (array $meta, string $key) => [
-                    'key' => $key,
+            'calendars' => app(CalendarFeed::class)->collections($user)
+                ->map(fn (array $meta) => [
+                    'key' => $meta['key'],
                     'name' => $meta['name'],
                     'description' => $meta['description'],
                     'writable' => $meta['writable'],
                 ])
-                ->values()
                 ->all(),
             'devices' => $user->calendarCredentials()
                 ->get()
