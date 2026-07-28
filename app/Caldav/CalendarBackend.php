@@ -157,30 +157,38 @@ class CalendarBackend extends AbstractBackend
     {
         [$userId, $collection] = $this->split($calendarId);
 
-        if (! CalendarCollections::allowsCreate($collection)) {
-            throw new Forbidden(
-                CalendarCollections::name($collection).': ebbe a naptárba a telefonról nem vehető fel új bejegyzés.'
-            );
-        }
-
         $user = $this->user($userId);
         $attributes = $this->parse($calendarData);
         $projectId = CalendarCollections::projectId($collection);
 
         // Naptárak közti mozgatásnál a telefon nem MOVE-ot küld, hanem az új
         // naptárba PUT-ot és a régiből DELETE-et — tetszőleges sorrendben.
-        // Ha tehát már létezik ilyen bejegyzés, ez áthelyezés, nem ütközés:
-        // a projektjét igazítjuk a cél-naptárhoz, a típusát viszont nem
-        // bántjuk (egy beosztás a telefonon se váljon személyessé).
+        // Ha tehát már létezik ilyen bejegyzés, ez áthelyezés, nem ütközés.
         $existing = $this->findByObjectName($attributes['uid'] ?: null, $objectUri);
 
+        // Az „új bejegyzés nem vehető fel” szabály csak a VALÓBAN újakra
+        // vonatkozik: egy meglévő beosztás áthelyezése a munkanaptárba
+        // (vagyis kivétele a projektből) attól még megengedett.
+        if ($existing === null && ! CalendarCollections::allowsCreate($collection)) {
+            throw new Forbidden(
+                CalendarCollections::name($collection).': ebbe a naptárba a telefonról nem vehető fel új bejegyzés.'
+            );
+        }
+
         if ($existing !== null) {
+            if (! CalendarCollections::isWritable($collection)) {
+                throw new Forbidden(
+                    CalendarCollections::name($collection).': ez a naptár csak olvasható.'
+                );
+            }
+
             if (! $existing->canBeManagedBy($user)) {
                 throw new Conflict('Ezzel az azonosítóval már létezik naptárbejegyzés.');
             }
 
             unset($attributes['uid']);
             $existing->fill($attributes);
+            $existing->type = $this->resolveType($collection, $user, $existing);
             $existing->project_id = $projectId;
             $existing->caldav_uri = $objectUri;
             $existing->save();
@@ -193,7 +201,7 @@ class CalendarBackend extends AbstractBackend
         $event = CalendarEvent::create([
             ...$attributes,
             'uid' => $attributes['uid'] ?: null,
-            'type' => 'szemelyes',
+            'type' => $this->resolveType($collection, $user, null),
             'project_id' => $projectId,
             'caldav_uri' => $objectUri,
             'created_by' => $user->id,
@@ -202,6 +210,43 @@ class CalendarBackend extends AbstractBackend
         $this->forget($calendarId);
 
         return $event->etag();
+    }
+
+    /**
+     * A cél-naptár dönti el, hogy a bejegyzés privát-e vagy közös.
+     *
+     * A telefon naptárában nincs „láthatóság” kapcsoló, ezért ezt a naptár
+     * választása hordozza: a Személyes csak a sajátod, a projekt- és a
+     * munkanaptár tartalmát a csapat is látja. Az áthelyezés így értelmes
+     * művelet: privátból projektbe tenni annyi, mint megosztani.
+     */
+    private function resolveType(string $collection, User $user, ?CalendarEvent $existing): string
+    {
+        if ($collection === CalendarCollections::PERSONAL) {
+            // A beosztás és a szállítás modul-adat: ha priváttá tennénk,
+            // eltűnne azok elől, akikre tartozik.
+            if ($existing !== null && in_array($existing->type, ['beosztas', 'szallitas'], true)) {
+                throw new Forbidden(
+                    'A beosztás és az anyagszállítás nem tehető személyes bejegyzéssé. Ezt az Octopusban tudod átállítani.'
+                );
+            }
+
+            return 'szemelyes';
+        }
+
+        // Közös naptár. A már közös típusokat megtartjuk (egy beosztás
+        // maradjon beosztás), a privátból viszont esemény lesz.
+        if ($existing !== null && $existing->type !== 'szemelyes') {
+            return $existing->type;
+        }
+
+        if (! $user->can('scheduling.create')) {
+            throw new Forbidden(
+                'Közös bejegyzés létrehozásához nincs jogosultságod. A saját bejegyzéseidet az „Octopus – Személyes” naptárba vedd fel.'
+            );
+        }
+
+        return 'esemeny';
     }
 
     public function updateCalendarObject($calendarId, $objectUri, $calendarData): string

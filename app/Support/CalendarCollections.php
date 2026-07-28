@@ -33,21 +33,21 @@ class CalendarCollections
     public const FIXED = [
         self::PERSONAL => [
             'name' => 'Octopus – Személyes',
-            'description' => 'Projekthez nem kötött saját bejegyzések. Telefonról is felvehető.',
+            'description' => 'CSAK TE LÁTOD. Ide kerül minden privát bejegyzésed, akkor is, ha projekthez van kötve.',
             'color' => '#2563EBFF',
             'writable' => true,
             'creatable' => true,
         ],
         self::WORK => [
             'name' => 'Octopus – Munkanaptár',
-            'description' => 'Projekt nélküli beosztások és céges események. A meglévők szerkeszthetők, új beosztást az Octopusban kell felvenni.',
+            'description' => 'A csapat is látja. Projekt nélküli beosztások és céges események; a meglévők szerkeszthetők, új beosztást az Octopusban kell felvenni.',
             'color' => '#EA580CFF',
             'writable' => true,
             'creatable' => false,
         ],
         self::DEADLINES => [
             'name' => 'Octopus – Határidők',
-            'description' => 'Fázis- és feladathatáridők, anyagszállítás, gépfoglalás, szabadság. Csak olvasható.',
+            'description' => 'Csak olvasható. Fázis- és feladathatáridők, anyagszállítás, gépfoglalás, szabadság — a forrásmodulokból.',
             'color' => '#475569FF',
             'writable' => false,
             'creatable' => false,

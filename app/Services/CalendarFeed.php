@@ -51,7 +51,7 @@ class CalendarFeed
             // A fiók neve a telefonon már „Octopus”, ezért itt a projekt
             // azonosítója a hasznos információ, nem az ismételt márkanév.
             'name' => trim($project->code.' · '.$project->name),
-            'description' => 'A projekt bejegyzései. Ide mentve a telefonon is ehhez a projekthez rendelődik.',
+            'description' => 'A csapat is látja. Ide mentve a bejegyzés ehhez a projekthez rendelődik.',
             'color' => CalendarCollections::projectColor($project->id),
             'writable' => true,
             'creatable' => true,
@@ -74,18 +74,18 @@ class CalendarFeed
     }
 
     /**
-     * Saját, projekthez NEM kötött bejegyzések.
+     * A saját, privát bejegyzéseid — projekttől függetlenül MIND ide tartozik.
      *
-     * A projekthez kötöttek a projekt saját naptárában jelennek meg — egy
-     * bejegyzés pontosan egy naptárban szerepelhet, különben a telefon
-     * duplán mutatná.
+     * A felosztás elve: ami privát, az mindig a Személyes naptárban van, ami
+     * közös, az a projekt naptárában vagy a Munkanaptárban. Így a telefonon a
+     * naptár neve egyértelműen megmondja, ki látja a bejegyzést — és egy
+     * bejegyzés pontosan egy naptárban szerepel, nem duplázódik.
      */
     public function personalEvents(User $user): Collection
     {
         return CalendarEvent::query()
             ->where('type', 'szemelyes')
             ->where('created_by', $user->id)
-            ->whereNull('project_id')
             ->whereBetween('starts_on', $this->window())
             ->with(['project:id,code,name', 'assignees:id,name'])
             ->get();
@@ -107,22 +107,19 @@ class CalendarFeed
     }
 
     /**
-     * Egy projekt naptára: minden hozzá tartozó bejegyzés, amit a felhasználó
-     * amúgy is látna — a saját személyes bejegyzései és a rá tartozó munkák.
+     * Egy projekt naptára: a projekt KÖZÖS bejegyzései, amik rád tartoznak.
+     *
+     * Privát bejegyzés ide sosem kerül — az a Személyesben marad, akkor is,
+     * ha projekthez van kötve. Így a projekt naptárában látott bejegyzésről
+     * biztosan tudod, hogy a csapat is látja.
      */
     public function projectEvents(User $user, int $projectId): Collection
     {
         return CalendarEvent::query()
             ->where('project_id', $projectId)
+            ->whereIn('type', ['beosztas', 'szallitas', 'esemeny'])
             ->whereBetween('starts_on', $this->window())
-            ->where(function ($q) use ($user) {
-                $q->where(fn ($own) => $own
-                    ->where('type', 'szemelyes')
-                    ->where('created_by', $user->id))
-                    ->orWhere(fn ($work) => $work
-                        ->whereIn('type', ['beosztas', 'szallitas', 'esemeny'])
-                        ->where(fn ($v) => $this->scopeToUser($v, $user)));
-            })
+            ->where(fn ($q) => $this->scopeToUser($q, $user))
             ->with(['project:id,code,name', 'assignees:id,name'])
             ->get();
     }
