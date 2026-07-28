@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CalendarCredential;
 use App\Services\AppleCalendarProfile;
 use App\Support\CalendarCollections;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -64,10 +65,18 @@ class CalendarSyncController extends Controller
     }
 
     /**
-     * Új naptár-jelszó. A nyílt kulcsot egyszer, villanó üzenetben adjuk
-     * vissza — utána már nem visszanyerhető.
+     * Új naptár-jelszó.
+     *
+     * A nyílt kulcsot KÖZVETLENÜL a válaszban adjuk vissza, nem villanó
+     * munkamenet-üzenetben: az átirányítás után megjelenő doboz a telefon
+     * képernyőjén a görgetési pozíció fölé kerülhet, és a felhasználónak úgy
+     * tűnik, a gomb nem csinál semmit. A választ a felület párbeszédablakban
+     * mutatja meg, ami nem múlhat el észrevétlenül.
+     *
+     * A kulcs sehol máshol nem kérhető le újra — az adatbázisban csak a
+     * lenyomata van.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): JsonResponse
     {
         $user = $request->user();
         abort_unless($user->can('scheduling.view'), 403);
@@ -76,10 +85,10 @@ class CalendarSyncController extends Controller
 
         [, $token] = CalendarCredential::issue($user, $data['name']);
 
-        return back()
-            ->with('success', 'A naptár-jelszó elkészült.')
-            ->with('calendar_token', $token)
-            ->with('calendar_token_device', $data['name']);
+        return response()->json([
+            'device' => $data['name'],
+            'token' => $token,
+        ]);
     }
 
     /**
@@ -93,7 +102,7 @@ class CalendarSyncController extends Controller
      * Minden letöltéshez FRISS kulcsot adunk ki: a fájl nyílt szöveggel
      * tartalmazza, ezért nem szabad újra felhasználni egy korábbit.
      */
-    public function mobileconfig(Request $request, AppleCalendarProfile $profiles): RedirectResponse
+    public function mobileconfig(Request $request, AppleCalendarProfile $profiles): JsonResponse
     {
         $user = $request->user();
         abort_unless($user->can('scheduling.view'), 403);
@@ -115,10 +124,10 @@ class CalendarSyncController extends Controller
             'body' => $profiles->build($user, $data['name'], $token),
         ], self::PROFILE_TTL);
 
-        return back()
-            ->with('success', 'A konfigurációs profil elkészült.')
-            ->with('calendar_profile_url', route('profile.calendar-sync.profile', $key))
-            ->with('calendar_token_device', $data['name']);
+        return response()->json([
+            'device' => $data['name'],
+            'url' => route('profile.calendar-sync.profile', $key),
+        ]);
     }
 
     /**

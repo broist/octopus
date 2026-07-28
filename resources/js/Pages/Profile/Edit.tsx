@@ -9,17 +9,7 @@ import CalendarSyncForm, {
     CalendarSyncProps,
 } from '@/Pages/Profile/Partials/CalendarSyncForm';
 
-export default function Edit({
-    calendarSync,
-    calendarToken,
-    calendarTokenDevice,
-    calendarProfileUrl,
-}: {
-    calendarSync: CalendarSyncProps;
-    calendarToken?: string | null;
-    calendarTokenDevice?: string | null;
-    calendarProfileUrl?: string | null;
-}) {
+export default function Edit({ calendarSync }: { calendarSync: CalendarSyncProps }) {
     return (
         <>
             <Head title="Profil és biztonság" />
@@ -33,12 +23,7 @@ export default function Edit({
                 <UpdateProfileInformationForm />
                 <UpdatePasswordForm />
                 <TwoFactorAuthenticationForm />
-                <CalendarSyncForm
-                    sync={calendarSync}
-                    token={calendarToken}
-                    tokenDevice={calendarTokenDevice}
-                    profileUrl={calendarProfileUrl}
-                />
+                <CalendarSyncForm sync={calendarSync} />
             </div>
         </>
     );

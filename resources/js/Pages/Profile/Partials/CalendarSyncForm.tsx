@@ -1,17 +1,9 @@
-import { FormEventHandler, useRef, useState } from 'react';
-import { router, useForm } from '@inertiajs/react';
-import {
-    CalendarClock,
-    Check,
-    Copy,
-    Download,
-    Smartphone,
-    Trash2,
-    TriangleAlert,
-} from 'lucide-react';
+import { FormEventHandler, useState } from 'react';
+import { router } from '@inertiajs/react';
+import { CalendarClock, Smartphone, Trash2, TriangleAlert } from 'lucide-react';
 import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
-import InputError from '@/Components/ui/InputError';
+import CalendarKeyDialog, { IssuedKey } from '@/Pages/Profile/Partials/CalendarKeyDialog';
 
 type Device = {
     id: number;
@@ -48,46 +40,60 @@ const formatDate = (value: string | null) =>
           })
         : '–';
 
-export default function CalendarSyncForm({
-    sync,
-    token,
-    tokenDevice,
-    profileUrl,
-}: {
-    sync: CalendarSyncProps;
-    token?: string | null;
-    tokenDevice?: string | null;
-    profileUrl?: string | null;
-}) {
-    const [copied, setCopied] = useState(false);
-    const tokenBox = useRef<HTMLDivElement>(null);
-    // Kitöltött alapérték: így a gomb elsőre működik, és nem tűnik úgy, hogy
+export default function CalendarSyncForm({ sync }: { sync: CalendarSyncProps }) {
+    // Kitöltött alapértékek: a gombok elsőre működnek, és nem tűnik úgy, hogy
     // nem történik semmi, ha a felhasználó nem ír be nevet.
-    const { data, setData, post, processing, errors, reset } = useForm({
-        name: 'Telefon',
-    });
-    const profileForm = useForm({ name: 'iPhone' });
+    const [deviceName, setDeviceName] = useState('Telefon');
+    const [profileName, setProfileName] = useState('iPhone');
+    const [issued, setIssued] = useState<IssuedKey | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     if (!sync.enabled) {
         return null;
     }
 
+    /**
+     * A kérést axiosszal küldjük, nem Inertiával: a választ így közvetlenül
+     * megkapjuk és párbeszédablakban mutatjuk. Az Inertia-s átirányítás után
+     * megjelenő doboz a telefonon a görgetési pozíció fölé kerülhetett, és a
+     * felhasználó nem látta a frissen kiadott kulcsot.
+     */
+    const send = async <T,>(url: string, name: string, toIssued: (data: T) => IssuedKey) => {
+        setBusy(true);
+        setError(null);
+        try {
+            const response = await window.axios.post(url, { name });
+            setIssued(toIssued(response.data));
+            // Az eszközlista frissüljön, de a párbeszéd állapota maradjon meg.
+            router.reload({ only: ['calendarSync'] });
+        } catch (e: unknown) {
+            const err = e as { response?: { data?: { message?: string } } };
+            setError(
+                err.response?.data?.message ??
+                    'Nem sikerült létrehozni a naptár-jelszót. Próbáld újra, vagy jelentkezz be ismét.',
+            );
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const createToken: FormEventHandler = (e) => {
         e.preventDefault();
-        post('/profile/calendar-sync', {
-            preserveScroll: true,
-            onSuccess: () => reset(),
-            // A frissen generált kulcs a szekció tetején jelenik meg — ha az
-            // épp kigörgetett, a felhasználó azt hinné, nem történt semmi.
-            onFinish: () => tokenBox.current?.scrollIntoView({ block: 'center' }),
-        });
+        void send<{ device: string; token: string }>(
+            '/profile/calendar-sync',
+            deviceName,
+            (d) => ({ kind: 'token', device: d.device, token: d.token }),
+        );
     };
 
     const prepareProfile: FormEventHandler = (e) => {
         e.preventDefault();
-        profileForm.post('/profile/calendar-sync/mobileconfig', {
-            preserveScroll: true,
-        });
+        void send<{ device: string; url: string }>(
+            '/profile/calendar-sync/mobileconfig',
+            profileName,
+            (d) => ({ kind: 'profile', device: d.device, url: d.url }),
+        );
     };
 
     const revoke = (device: Device) => {
@@ -100,13 +106,6 @@ export default function CalendarSyncForm({
             return;
         }
         router.delete(`/profile/calendar-sync/${device.id}`, { preserveScroll: true });
-    };
-
-    const copyToken = async () => {
-        if (!token) return;
-        await navigator.clipboard.writeText(token);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 2000);
     };
 
     return (
@@ -125,29 +124,15 @@ export default function CalendarSyncForm({
                 </div>
             </header>
 
-            {/* Frissen generált kulcs — csak most látható */}
-            {token && (
-                <div
-                    ref={tokenBox}
-                    className="mt-5 rounded-lg border border-accent/40 bg-accent-50/60 p-4"
-                >
-                    <p className="text-sm font-medium text-ink">
-                        A(z) „{tokenDevice}” eszköz naptár-jelszava elkészült
-                    </p>
-                    <p className="mt-1 text-xs text-ink-soft">
-                        Írd be a telefon naptár-beállításánál. <strong>Csak most
-                        látható</strong> — ha elveszik, generálj újat.
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <code className="select-all rounded border border-line bg-white px-3 py-2 font-mono text-sm tracking-wide text-ink">
-                            {token}
-                        </code>
-                        <button type="button" className="btn-ghost" onClick={copyToken}>
-                            {copied ? <Check size={16} /> : <Copy size={16} />}
-                            <span className="ml-1.5">{copied ? 'Másolva' : 'Másolás'}</span>
-                        </button>
-                    </div>
-                </div>
+            {/* A frissen kiadott kulcs párbeszédablakban jelenik meg — az
+                oldalba ágyazott doboz a telefonon a látható terület fölé
+                kerülhetett, és észrevétlen maradt. */}
+            <CalendarKeyDialog issued={issued} onClose={() => setIssued(null)} />
+
+            {error && (
+                <p className="mt-4 rounded-lg border border-coral/40 bg-coral/5 px-3 py-2 text-sm text-coral">
+                    {error}
+                </p>
             )}
 
             {/* iPhone: konfigurációs profil — a jelszót nem kell begépelni */}
@@ -171,39 +156,15 @@ export default function CalendarSyncForm({
                         <InputLabel htmlFor="mobileconfig_name" value="Eszköz neve" />
                         <TextInput
                             id="mobileconfig_name"
-                            value={profileForm.data.name}
-                            onChange={(e) => profileForm.setData('name', e.target.value)}
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
                             maxLength={100}
                         />
-                        <InputError message={profileForm.errors.name} />
                     </div>
-                    <button
-                        type="submit"
-                        className="btn-primary"
-                        disabled={profileForm.processing}
-                    >
+                    <button type="submit" className="btn-primary" disabled={busy}>
                         Profil előkészítése
                     </button>
                 </form>
-
-                {/* A letöltés sima hivatkozás (GET): az iOS beépített böngészője
-                    a fájlt visszaadó POST-választ újraküldi GET-tel, ezért a
-                    közvetlen POST-os letöltés a telefonon elhasalna. */}
-                {profileUrl && (
-                    <div className="mt-3 rounded-lg border border-accent/40 bg-accent-50/60 p-3">
-                        <p className="text-sm font-medium text-ink">
-                            A profil elkészült
-                        </p>
-                        <p className="mt-1 text-xs text-ink-soft">
-                            Koppints a letöltésre, majd a telefon Beállításaiban
-                            telepítsd. A hivatkozás <strong>egyszer</strong> használható.
-                        </p>
-                        <a href={profileUrl} className="btn-primary mt-2 inline-flex">
-                            <Download size={16} />
-                            <span className="ml-1.5">Profil letöltése</span>
-                        </a>
-                    </div>
-                )}
             </div>
 
             {/* Kézi beállítás (Android / egyéb kliens) */}
@@ -229,14 +190,13 @@ export default function CalendarSyncForm({
                         <InputLabel htmlFor="device_name" value="Eszköz neve" />
                         <TextInput
                             id="device_name"
-                            value={data.name}
-                            onChange={(e) => setData('name', e.target.value)}
+                            value={deviceName}
+                            onChange={(e) => setDeviceName(e.target.value)}
                             placeholder="pl. Munkatelefon"
                             maxLength={100}
                         />
-                        <InputError message={errors.name} />
                     </div>
-                    <button type="submit" className="btn-ghost" disabled={processing}>
+                    <button type="submit" className="btn-primary" disabled={busy}>
                         Naptár-jelszó generálása
                     </button>
                 </form>

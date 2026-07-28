@@ -15,11 +15,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/profile', fn (Request $request) => Inertia::render('Profile/Edit', [
         'status' => session('status'),
         'calendarSync' => CalendarSyncController::props($request),
-        // A nyílt naptár-jelszó csak közvetlenül a létrehozás után, egyszer
-        // jelenik meg — utána már csak a lenyomata létezik.
-        'calendarToken' => session('calendar_token'),
-        'calendarTokenDevice' => session('calendar_token_device'),
-        'calendarProfileUrl' => session('calendar_profile_url'),
     ]))->name('profile.edit');
 
     Route::post('/profile/calendar-sync', [CalendarSyncController::class, 'store'])
