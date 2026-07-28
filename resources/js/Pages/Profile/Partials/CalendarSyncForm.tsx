@@ -1,4 +1,4 @@
-import { FormEventHandler, useState } from 'react';
+import { FormEventHandler, useRef, useState } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import {
     CalendarClock,
@@ -60,8 +60,11 @@ export default function CalendarSyncForm({
     profileUrl?: string | null;
 }) {
     const [copied, setCopied] = useState(false);
+    const tokenBox = useRef<HTMLDivElement>(null);
+    // Kitöltött alapérték: így a gomb elsőre működik, és nem tűnik úgy, hogy
+    // nem történik semmi, ha a felhasználó nem ír be nevet.
     const { data, setData, post, processing, errors, reset } = useForm({
-        name: '',
+        name: 'Telefon',
     });
     const profileForm = useForm({ name: 'iPhone' });
 
@@ -74,6 +77,9 @@ export default function CalendarSyncForm({
         post('/profile/calendar-sync', {
             preserveScroll: true,
             onSuccess: () => reset(),
+            // A frissen generált kulcs a szekció tetején jelenik meg — ha az
+            // épp kigörgetett, a felhasználó azt hinné, nem történt semmi.
+            onFinish: () => tokenBox.current?.scrollIntoView({ block: 'center' }),
         });
     };
 
@@ -121,7 +127,10 @@ export default function CalendarSyncForm({
 
             {/* Frissen generált kulcs — csak most látható */}
             {token && (
-                <div className="mt-5 rounded-lg border border-accent/40 bg-accent-50/60 p-4">
+                <div
+                    ref={tokenBox}
+                    className="mt-5 rounded-lg border border-accent/40 bg-accent-50/60 p-4"
+                >
                     <p className="text-sm font-medium text-ink">
                         A(z) „{tokenDevice}” eszköz naptár-jelszava elkészült
                     </p>

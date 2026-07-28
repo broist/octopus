@@ -72,9 +72,7 @@ class CalendarSyncController extends Controller
         $user = $request->user();
         abort_unless($user->can('scheduling.view'), 403);
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-        ], [], ['name' => 'eszköz neve']);
+        $data = $this->validateDeviceName($request);
 
         [, $token] = CalendarCredential::issue($user, $data['name']);
 
@@ -100,9 +98,7 @@ class CalendarSyncController extends Controller
         $user = $request->user();
         abort_unless($user->can('scheduling.view'), 403);
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
-        ], [], ['name' => 'eszköz neve']);
+        $data = $this->validateDeviceName($request);
 
         [, $token] = CalendarCredential::issue($user, $data['name']);
 
@@ -141,6 +137,23 @@ class CalendarSyncController extends Controller
             // ne tárolja el.
             'Cache-Control' => 'no-store, no-cache, must-revalidate, private',
             'Pragma' => 'no-cache',
+        ]);
+    }
+
+    /**
+     * Az eszköz neve. Az alkalmazás alapértelmezett nyelve angol, ezért a
+     * hibaüzenetet itt adjuk meg magyarul — enélkül a felhasználó egy apró
+     * angol sort kapna, és úgy tűnne, a gomb egyszerűen nem csinál semmit.
+     *
+     * @return array<string, string>
+     */
+    private function validateDeviceName(Request $request): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+        ], [
+            'name.required' => 'Adj nevet az eszköznek, hogy később felismerd a listában (pl. „Munkatelefon”).',
+            'name.max' => 'Az eszköz neve legfeljebb 100 karakter lehet.',
         ]);
     }
 
