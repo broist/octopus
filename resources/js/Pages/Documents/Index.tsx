@@ -236,29 +236,51 @@ export default function Index() {
     }, []);
 
     /**
-     * A választott fájlok/mappa átvétele. Mappa-forrásnál üres eredménynél is
-     * megnyitjuk a párbeszédet indoklással — a néma elhalás azt a látszatot
-     * kelti, hogy „nem történik semmi”.
+     * A választott/behúzott elemek átvétele. A böngésző néha a MAPPÁT magát
+     * adja át „fájlként”, a tartalma nélkül (0 bájt, típus nélkül) — ezeket
+     * kiszűrjük, mert feltöltve csak üres szemetet hoznának létre. Üres
+     * eredménynél is megnyitjuk a párbeszédet az indoklással: a néma elhalás
+     * azt a látszatot kelti, hogy „nem történik semmi”.
      */
+    const acceptEntries = (
+        entries: UploadEntry[],
+        targetId: number | null,
+        emptyNotice: string,
+    ) => {
+        const folderLike = entries.filter((entry) => looksLikeFolder(entry.file));
+        const usable = entries.filter((entry) => ! looksLikeFolder(entry.file));
+
+        const names = folderLike
+            .slice(0, 3)
+            .map((entry) => `„${entry.file.name}”`)
+            .join(', ');
+
+        const folderNotice = folderLike.length > 0
+            ? `A böngésző ${folderLike.length} mappát (${names}${folderLike.length > 3 ? ' …' : ''}) `
+                + 'a tartalma nélkül adott át, ezért kimaradt. Mappához használja a '
+                + '„Feltöltés ▾ → Mappa feltöltése (almappákkal)…” gombot.'
+            : undefined;
+
+        setUpload({
+            entries: usable,
+            folderId: targetId,
+            notice: usable.length > 0 ? folderNotice : (folderNotice ?? emptyNotice),
+        });
+    };
+
     const onFilesPicked = (list: FileList | null, source: 'file' | 'folder' = 'file') => {
         const entries = entriesFromFiles(list);
 
-        if (entries.length > 0) {
-            setUpload({ entries, folderId });
+        // A fájlválasztó megszakítása is üres listával érkezhet — arra ne nyíljon ablak.
+        if (entries.length === 0 && source === 'file') return;
 
-            return;
-        }
-
-        if (source === 'folder') {
-            setUpload({
-                entries: [],
-                folderId,
-                notice:
-                    'A kiválasztott mappában nem található feltölthető fájl. Ha a mappa nem üres, '
-                    + 'elképzelhető, hogy a fájlok csak a felhőben vannak (OneDrive „csak online” '
-                    + 'állapot) — nyissa meg őket egyszer, hogy helyben is elérhetők legyenek.',
-            });
-        }
+        acceptEntries(
+            entries,
+            folderId,
+            'A kiválasztott mappában nem található feltölthető fájl. Ha a mappa nem üres, '
+                + 'elképzelhető, hogy a fájlok csak a felhőben vannak (OneDrive „csak online” '
+                + 'állapot) — nyissa meg őket egyszer, hogy helyben is elérhetők legyenek.',
+        );
     };
 
     /* ---------------- navigáció + előzmények ---------------- */
@@ -736,26 +758,14 @@ export default function Index() {
         // almappástul bejárjuk (a DataTransfer csak szinkron olvasható).
         if (e.dataTransfer.types.includes('Files')) {
             void entriesFromDrop(e.dataTransfer)
-                .then((entries) => {
-                    const folderLike = entries.filter((entry) => looksLikeFolder(entry.file));
-                    const usable = entries.filter((entry) => ! looksLikeFolder(entry.file));
-
-                    if (usable.length > 0) {
-                        setUpload({ entries: usable, folderId: targetId });
-
-                        return;
-                    }
-
-                    setUpload({
-                        entries: [],
-                        folderId: targetId,
-                        notice: folderLike.length > 0
-                            ? 'Ez a böngésző nem adja át a behúzott mappa tartalmát. Használja a '
-                                + '„Feltöltés ▾ → Mappa feltöltése (almappákkal)…” gombot.'
-                            : 'A behúzott elemekből nem sikerült fájlt beolvasni (üres mappa, vagy '
-                                + 'a fájlok csak a felhőben érhetők el).',
-                    });
-                })
+                .then((entries) =>
+                    acceptEntries(
+                        entries,
+                        targetId,
+                        'A behúzott elemekből nem sikerült fájlt beolvasni (üres mappa, vagy a '
+                            + 'fájlok csak a felhőben érhetők el).',
+                    ),
+                )
                 .catch((err: unknown) =>
                     setUpload({
                         entries: [],
