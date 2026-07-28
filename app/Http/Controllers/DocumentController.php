@@ -7,15 +7,28 @@ use App\Models\Document;
 use App\Models\Folder;
 use App\Models\Partner;
 use App\Models\Project;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DocumentController extends Controller
 {
+    /**
+     * Egy kérésben feltölthető fájlok száma. A PHP `max_file_uploads`
+     * alapértéke 20, e fölött csendben eldobná a többit — a kliens ezért
+     * szakaszol, a mappa-feltöltés is ilyen körökből áll össze.
+     */
+    private const MAX_FILES = 20;
+
+    /** Mappa-feltöltésnél újraépített legnagyobb mélység. */
+    private const MAX_DEPTH = 15;
+
     /**
      * Explorer nézet: az aktuális mappa tartalma, vagy szűrt (lapos) találati
      * lista, ha keresés/szűrő aktív.
@@ -148,39 +161,57 @@ class DocumentController extends Controller
     /**
      * Feltöltés: egy vagy több fájl az aktuális mappába (mobilon galéria /
      * kamera forrásból is).
+     *
+     * Mappa-feltöltésnél a kliens fájlonként elküldi a kiválasztott mappán
+     * belüli relatív ÚTVONALAT is (`paths[]`, pl. „Tervek/2026”), így az
+     * almappa-szerkezet itt épül újra. A kliens a nagy feltöltést több,
+     * egyenként legfeljebb MAX_FILES darabos kérésre bontja és JSON-választ
+     * vár — a mappa-feloldás ezért kis-nagybetű független és idempotens: a
+     * második kör már a meglévő mappákba tölt.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         $user = $request->user();
 
         $data = $request->validate([
-            'files' => ['required', 'array', 'min:1', 'max:20'],
-            'files.*' => [
-                'file',
-                'max:'.DocumentRequest::MAX_KB,
-                'extensions:'.DocumentRequest::EXTENSIONS,
-            ],
+            'files' => ['required', 'array', 'min:1', 'max:'.self::MAX_FILES],
+            // Minden formátum engedélyezett — csak a méret korlátoz.
+            'files.*' => ['file', 'max:'.DocumentRequest::MAX_KB],
             // Feltöltéskori átnevezés: fájlonként megadható megjelenített név.
             'names' => ['nullable', 'array'],
             'names.*' => ['nullable', 'string', 'max:190'],
+            // Mappa-feltöltés: fájlonkénti relatív mappa-útvonal (fájlnév nélkül).
+            'paths' => ['nullable', 'array'],
+            'paths.*' => ['nullable', 'string', 'max:1000'],
             'folder_id' => ['nullable', 'integer', 'exists:folders,id'],
             'category' => ['nullable', \Illuminate\Validation\Rule::in(array_keys(Document::CATEGORIES))],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
         ], [
             'files.required' => 'Válasszon ki legalább egy fájlt.',
-            'files.max' => 'Egyszerre legfeljebb 20 fájl tölthető fel.',
+            'files.max' => 'Egy kérésben legfeljebb '.self::MAX_FILES.' fájl küldhető.',
             'files.*.max' => 'Valamelyik fájl túl nagy (legfeljebb 120 MB lehet).',
-            'files.*.extensions' => 'Valamelyik fájl típusa nem engedélyezett.',
         ]);
 
         $folder = isset($data['folder_id']) ? Folder::findOrFail($data['folder_id']) : null;
         abort_unless(Folder::canCreateIn($user, $folder), 403);
 
         $names = $data['names'] ?? [];
+        $paths = $data['paths'] ?? [];
 
         $count = 0;
-        DB::transaction(function () use ($data, $names, $folder, $user, $request, &$count) {
+        $newFolders = 0;
+        DB::transaction(function () use ($data, $names, $paths, $folder, $user, $request, &$count, &$newFolders) {
+            $cache = [];
+
             foreach ($request->file('files') as $i => $file) {
+                $target = $this->resolveUploadFolder(
+                    (string) ($paths[$i] ?? ''),
+                    $folder,
+                    $user,
+                    $cache,
+                    $newFolders,
+                );
+
                 $mime = $file->getMimeType() ?? '';
                 $category = ($data['category'] ?? null)
                     ?: (str_starts_with($mime, 'image/') ? 'foto' : 'egyeb');
@@ -203,7 +234,7 @@ class DocumentController extends Controller
                 $document = Document::create([
                     'title' => $title,
                     'category' => $category,
-                    'folder_id' => $folder?->id,
+                    'folder_id' => $target?->id,
                     'project_id' => $data['project_id'] ?? null,
                     'uploaded_by' => $user->id,
                 ]);
@@ -226,9 +257,103 @@ class DocumentController extends Controller
             }
         });
 
-        return back()->with('success', $count === 1
-            ? 'A fájl feltöltve.'
-            : "{$count} fájl feltöltve.");
+        // Szakaszolt (mappa-)feltöltésnél a kliens axiosszal küld: JSON kell,
+        // hogy össze tudja adni a köröket, és ne kérje le közben az oldalt.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'uploaded' => $count,
+                'folders_created' => $newFolders,
+            ]);
+        }
+
+        $message = $count === 1 ? 'A fájl feltöltve.' : "{$count} fájl feltöltve.";
+        if ($newFolders > 0) {
+            $message .= $newFolders === 1
+                ? ' 1 mappa létrejött.'
+                : " {$newFolders} mappa létrejött.";
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /**
+     * A relatív útvonalhoz tartozó mappa megkeresése (kis-nagybetű független)
+     * vagy létrehozása a célmappa alatt — mappa-feltöltéshez.
+     *
+     * @param  array<string, Folder|null>  $cache  kérésen belüli útvonal→mappa gyorsítótár
+     */
+    private function resolveUploadFolder(
+        string $relativePath,
+        ?Folder $base,
+        User $user,
+        array &$cache,
+        int &$created,
+    ): ?Folder {
+        $parent = $base;
+        $key = '';
+
+        foreach ($this->pathSegments($relativePath) as $segment) {
+            $key .= mb_strtolower($segment).'/';
+
+            if (array_key_exists($key, $cache)) {
+                $parent = $cache[$key];
+
+                continue;
+            }
+
+            $existing = Folder::query()
+                ->where('parent_id', $parent?->id)
+                ->whereRaw('lower(name) = lower(?)', [$segment])
+                ->first();
+
+            if ($existing) {
+                // Meglévő (esetleg korlátozott) mappába csak jogosultsággal.
+                if (! Folder::canCreateIn($user, $existing)) {
+                    throw ValidationException::withMessages([
+                        'files' => "A(z) „{$existing->name}” mappába nincs feltöltési jogosultsága.",
+                    ]);
+                }
+                $parent = $existing;
+            } else {
+                $parent = Folder::create([
+                    'name' => $segment,
+                    'parent_id' => $parent?->id,
+                    'created_by' => $user->id,
+                ]);
+                $created++;
+            }
+
+            $cache[$key] = $parent;
+        }
+
+        return $parent;
+    }
+
+    /**
+     * A kliens által küldött útvonal biztonságos szétbontása mappanevekre
+     * (kilépés-kísérlet, üres és vezérlőkarakteres részek kiszűrve).
+     *
+     * @return array<int, string>
+     */
+    private function pathSegments(string $path): array
+    {
+        $segments = [];
+
+        foreach (preg_split('#[\\\\/]+#', $path) ?: [] as $raw) {
+            $name = trim((string) preg_replace('/[\x00-\x1F]/u', '', $raw));
+
+            if ($name === '' || $name === '.' || $name === '..') {
+                continue;
+            }
+
+            $segments[] = Str::limit($name, 120, '');
+
+            if (count($segments) >= self::MAX_DEPTH) {
+                break;
+            }
+        }
+
+        return $segments;
     }
 
     public function show(Request $request, Document $document): Response

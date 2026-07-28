@@ -28,7 +28,7 @@ class TaskRequest extends FormRequest
             'assignees.*' => ['integer', 'exists:users,id'],
             // Csatolmányok (fájl/kép), szerkesztéskor törölhető meglévők.
             'attachments' => ['nullable', 'array', 'max:20'],
-            'attachments.*' => ['file', 'max:'.DocumentRequest::MAX_KB, 'extensions:'.DocumentRequest::EXTENSIONS],
+            'attachments.*' => ['file', 'max:'.DocumentRequest::MAX_KB],
             'remove_attachments' => ['nullable', 'array'],
             'remove_attachments.*' => ['integer'],
         ];
@@ -50,7 +50,6 @@ class TaskRequest extends FormRequest
             'project_id.exists' => 'A kiválasztott projekt nem található.',
             'assignees.*.exists' => 'A kiválasztott felelős nem található.',
             'attachments.*.max' => 'Valamelyik csatolmány túl nagy (legfeljebb 120 MB).',
-            'attachments.*.extensions' => 'Valamelyik csatolmány típusa nem engedélyezett.',
         ];
     }
 }

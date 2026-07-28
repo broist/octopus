@@ -8,8 +8,13 @@ use Illuminate\Validation\Rule;
 
 class DocumentRequest extends FormRequest
 {
-    /** Engedélyezett kiterjesztések (építőipari formátumokkal: dwg, dxf, ifc). */
-    public const EXTENSIONS = 'jpg,jpeg,png,gif,webp,heic,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,dwg,dxf,skp,ifc';
+    /*
+     * Kiterjesztés-szűrés NINCS: a fájlkezelőbe minden formátum feltölthető
+     * (megrendelői döntés 2026-07-28). A tárolás a webgyökéren kívül van, a
+     * letöltés mindig csatolmányként megy, előnézetet pedig csak kép/PDF kap
+     * (lásd DocumentVersion::isPreviewable) — így a szabad formátum nem nyit
+     * végrehajtási rést.
+     */
 
     /** Max fájlméret KB-ban (~120 MB; a PHP/nginx limit 128/140 MB). */
     public const MAX_KB = 122880;

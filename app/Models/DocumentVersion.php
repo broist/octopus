@@ -41,10 +41,17 @@ class DocumentVersion extends Model
 
     /**
      * Böngészőben megjeleníthető-e (kép vagy PDF) az előnézethez.
+     *
+     * Az SVG szándékosan kimarad: az beágyazott szkriptet futtathatna a saját
+     * kiszolgálónkról. Feltölthető és letölthető, csak előnézete nincs.
      */
     public function isPreviewable(): bool
     {
         $mime = (string) $this->mime_type;
+
+        if ($mime === 'image/svg+xml') {
+            return false;
+        }
 
         return str_starts_with($mime, 'image/') || $mime === 'application/pdf';
     }

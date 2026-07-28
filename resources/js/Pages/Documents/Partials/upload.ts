@@ -1,0 +1,166 @@
+/**
+ * Feltöltés-segédek: mappák (almappákkal) begyűjtése fájlválasztóból és
+ * húzás–ejtésből, valamint a nagy feltöltés szakaszokra bontása.
+ */
+
+/** Egy feltöltendő fájl a célmappán belüli relatív mappa-útvonalával. */
+export interface UploadEntry {
+    file: File;
+    /** Relatív mappa-útvonal fájlnév nélkül; '' = közvetlenül a célmappába. */
+    path: string;
+}
+
+/** Legnagyobb fájlméret (a szerver oldali 120 MB-os korláttal egyezően). */
+export const MAX_FILE_BYTES = 120 * 1024 * 1024;
+
+/** Egy kérésben küldött fájlok száma (a PHP max_file_uploads=20 alatt marad). */
+const BATCH_FILES = 15;
+
+/** Egy kérés hasznos terhe (a post_max_size=140M alatt marad). */
+const BATCH_BYTES = 80 * 1024 * 1024;
+
+/** Egy feltöltésben kezelt fájlok felső korlátja (böngésző-védelem). */
+export const MAX_ENTRIES = 2000;
+
+/** A fájl relatív mappa-útvonala mappaválasztó esetén (webkitRelativePath). */
+function relativeDir(file: File): string {
+    const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? '';
+    if (!rel) return '';
+
+    const parts = rel.split('/');
+    parts.pop(); // a fájlnév nem része az útvonalnak
+
+    return parts.join('/');
+}
+
+/** Fájlválasztóból (fájl vagy mappa) érkező lista átalakítása. */
+export function entriesFromFiles(list: FileList | File[] | null): UploadEntry[] {
+    if (!list) return [];
+
+    return Array.from(list)
+        .slice(0, MAX_ENTRIES)
+        .map((file) => ({ file, path: relativeDir(file) }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Húzás–ejtés: az operációs rendszerből behúzott mappa bejárása        */
+/* ------------------------------------------------------------------ */
+
+function readFile(entry: FileSystemFileEntry): Promise<File | null> {
+    return new Promise((resolve) => {
+        entry.file(
+            (file) => resolve(file),
+            () => resolve(null),
+        );
+    });
+}
+
+/** A könyvtár-olvasó hívásonként legfeljebb 100 elemet ad — üresig kell hívni. */
+function readDir(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+    return new Promise((resolve) => {
+        reader.readEntries(
+            (entries) => resolve(entries),
+            () => resolve([]),
+        );
+    });
+}
+
+async function walk(entry: FileSystemEntry, prefix: string, out: UploadEntry[]): Promise<void> {
+    if (out.length >= MAX_ENTRIES) return;
+
+    if (entry.isFile) {
+        const file = await readFile(entry as FileSystemFileEntry);
+        if (file) out.push({ file, path: prefix });
+
+        return;
+    }
+
+    if (!entry.isDirectory) return;
+
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+
+    for (;;) {
+        const batch = await readDir(reader);
+        if (batch.length === 0) break;
+
+        for (const child of batch) {
+            await walk(child, path, out);
+        }
+    }
+}
+
+/**
+ * Ejtett elemek begyűjtése. A mappákat a webkitGetAsEntry API-val járjuk be —
+ * ezt SZINKRON módon kell kiolvasni, mert a DataTransfer az esemény után
+ * érvénytelen (ezért van az első `await` előtt).
+ */
+export async function entriesFromDrop(dt: DataTransfer): Promise<UploadEntry[]> {
+    const roots: FileSystemEntry[] = [];
+
+    if (dt.items) {
+        for (const item of Array.from(dt.items)) {
+            const entry = item.kind === 'file' ? item.webkitGetAsEntry?.() : null;
+            if (entry) roots.push(entry);
+        }
+    }
+
+    // Régi böngésző vagy nem fájlrendszeri forrás: marad a lapos fájllista.
+    if (roots.length === 0) return entriesFromFiles(dt.files);
+
+    const out: UploadEntry[] = [];
+    for (const root of roots) {
+        await walk(root, '', out);
+    }
+
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Szakaszolás                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A feltöltés több kérésre bontása darabszám és méret szerint. Egy önmagában
+ * nagy fájl külön kérésbe kerül.
+ */
+export function buildBatches(entries: UploadEntry[]): UploadEntry[][] {
+    const batches: UploadEntry[][] = [];
+    let current: UploadEntry[] = [];
+    let bytes = 0;
+
+    for (const entry of entries) {
+        const size = entry.file.size;
+        const full = current.length >= BATCH_FILES || bytes + size > BATCH_BYTES;
+
+        if (current.length > 0 && full) {
+            batches.push(current);
+            current = [];
+            bytes = 0;
+        }
+
+        current.push(entry);
+        bytes += size;
+    }
+
+    if (current.length > 0) batches.push(current);
+
+    return batches;
+}
+
+/** Az érintett (újonnan létrejövő) mappa-útvonalak száma. */
+export function folderCount(entries: UploadEntry[]): number {
+    const paths = new Set<string>();
+
+    for (const entry of entries) {
+        const parts = entry.path.split('/').filter(Boolean);
+        for (let i = 1; i <= parts.length; i++) {
+            paths.add(parts.slice(0, i).join('/'));
+        }
+    }
+
+    return paths.size;
+}
+
+export const totalBytes = (entries: UploadEntry[]): number =>
+    entries.reduce((sum, e) => sum + e.file.size, 0);

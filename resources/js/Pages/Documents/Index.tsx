@@ -12,6 +12,7 @@ import {
     FolderInput,
     FolderOpen,
     FolderPlus,
+    FolderUp,
     Grid2x2,
     Image as ImageIcon,
     Info,
@@ -40,6 +41,11 @@ import PropertiesDialog from '@/Pages/Documents/Partials/PropertiesDialog';
 import TemplateDialog, { type FolderTemplate } from '@/Pages/Documents/Partials/TemplateDialog';
 import UploadDialog from '@/Pages/Documents/Partials/UploadDialog';
 import { AddressBar, CommandBar } from '@/Pages/Documents/Partials/ExplorerBars';
+import {
+    type UploadEntry,
+    entriesFromDrop,
+    entriesFromFiles,
+} from '@/Pages/Documents/Partials/upload';
 import {
     type ClipboardState,
     type ExplorerItem,
@@ -188,7 +194,10 @@ export default function Index() {
     );
     const [moveTargets, setMoveTargets] = useState<ExplorerItem[] | null>(null);
     const [propsTarget, setPropsTarget] = useState<PropsTarget | null>(null);
-    const [upload, setUpload] = useState<{ files: File[]; folderId: number | null } | null>(null);
+    const [upload, setUpload] = useState<{
+        entries: UploadEntry[];
+        folderId: number | null;
+    } | null>(null);
     const [confirm, setConfirm] = useState<{
         title: string;
         message: ReactNode;
@@ -213,12 +222,21 @@ export default function Index() {
 
     /* ---------------- fájl-bemenetek ---------------- */
     const fileInput = useRef<HTMLInputElement>(null);
+    const folderInput = useRef<HTMLInputElement>(null);
     const galleryInput = useRef<HTMLInputElement>(null);
     const cameraInput = useRef<HTMLInputElement>(null);
 
+    // A mappaválasztó kapcsolói nem szerepelnek a React attribútum-listáján,
+    // ezért kézzel tesszük ki őket (a fájl-lista így viszi a relatív útvonalat).
+    useEffect(() => {
+        folderInput.current?.setAttribute('webkitdirectory', '');
+        folderInput.current?.setAttribute('directory', '');
+    }, []);
+
     const onFilesPicked = (list: FileList | null) => {
-        if (list && list.length > 0) {
-            setUpload({ files: Array.from(list), folderId });
+        const entries = entriesFromFiles(list);
+        if (entries.length > 0) {
+            setUpload({ entries, folderId });
         }
     };
 
@@ -455,6 +473,12 @@ export default function Index() {
             disabled: !can.create,
             onClick: () => fileInput.current?.click(),
         },
+        {
+            label: 'Mappa feltöltése…',
+            icon: FolderUp,
+            disabled: !can.create,
+            onClick: () => folderInput.current?.click(),
+        },
         ...(coarse
             ? ([
                   {
@@ -682,8 +706,13 @@ export default function Index() {
         setDropKey(null);
         setFileDrag(false);
 
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            setUpload({ files: Array.from(e.dataTransfer.files), folderId: targetId });
+        // Az operációs rendszerből behúzott fájlok/mappák: a mappákat
+        // almappástul bejárjuk (a DataTransfer csak szinkron olvasható).
+        if (e.dataTransfer.types.includes('Files')) {
+            void entriesFromDrop(e.dataTransfer).then((entries) => {
+                if (entries.length > 0) setUpload({ entries, folderId: targetId });
+            });
+
             return;
         }
 
@@ -1008,6 +1037,16 @@ export default function Index() {
                 }}
             />
             <input
+                ref={folderInput}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                    onFilesPicked(e.target.files);
+                    e.target.value = '';
+                }}
+            />
+            <input
                 ref={galleryInput}
                 type="file"
                 accept="image/*"
@@ -1172,7 +1211,7 @@ export default function Index() {
                                 {!searchMode && can.create && (
                                     <p className="mt-1 max-w-sm text-xs text-ink-faint">
                                         Kattintson jobb gombbal az üres területre az „Új” menühöz,
-                                        vagy húzzon ide fájlokat a számítógépéről.
+                                        vagy húzzon ide fájlokat és mappákat a számítógépéről.
                                     </p>
                                 )}
                             </div>
@@ -1352,7 +1391,7 @@ export default function Index() {
 
             <UploadDialog
                 open={upload !== null}
-                files={upload?.files ?? []}
+                entries={upload?.entries ?? []}
                 folderId={upload?.folderId ?? null}
                 categories={categories}
                 projects={projects}

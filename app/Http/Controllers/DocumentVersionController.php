@@ -23,16 +23,12 @@ class DocumentVersionController extends Controller
         abort_unless(Folder::canEditIn($request->user(), $document->folder), 403);
 
         $data = $request->validate([
-            'file' => [
-                'required', 'file',
-                'max:'.DocumentRequest::MAX_KB,
-                'extensions:'.DocumentRequest::EXTENSIONS,
-            ],
+            // Minden formátum engedélyezett — csak a méret korlátoz.
+            'file' => ['required', 'file', 'max:'.DocumentRequest::MAX_KB],
             'note' => ['nullable', 'string', 'max:500'],
         ], [
             'file.required' => 'Válasszon ki egy fájlt a feltöltéshez.',
             'file.max' => 'A fájl túl nagy (legfeljebb 120 MB lehet).',
-            'file.extensions' => 'Ez a fájltípus nem engedélyezett.',
         ]);
 
         $file = $request->file('file');
@@ -127,6 +123,8 @@ class DocumentVersionController extends Controller
         if ($inline) {
             return $storage->response($version->file_path, $version->original_filename, [
                 'Content-Type' => $version->mime_type ?? 'application/octet-stream',
+                // A böngésző ne találgassa a típust (bármilyen formátum feltölthető).
+                'X-Content-Type-Options' => 'nosniff',
             ]);
         }
 
