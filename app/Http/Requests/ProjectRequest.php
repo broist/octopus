@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Project;
+use App\Support\PhaseTemplates;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -47,6 +48,13 @@ class ProjectRequest extends FormRequest
             'starts_on' => ['nullable', 'date'],
             'ends_on' => ['nullable', 'date', 'after_or_equal:starts_on'],
             'description' => ['nullable', 'string', 'max:5000'],
+
+            // Új projektnél betöltendő ütemterv-sablon (nem a projekt mezője —
+            // a controller a mentés után importálja belőle a fázisokat).
+            'phase_template' => [
+                'nullable', 'string',
+                Rule::in(array_keys(PhaseTemplates::all())),
+            ],
         ];
     }
 

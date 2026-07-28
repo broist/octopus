@@ -53,6 +53,17 @@ export interface PhaseItem {
     seq: number;
     name: string;
     sort_order: number;
+    /** Fölérendelt összegző sor a munkastruktúrában. */
+    parent_id: number | null;
+    /** Mélység a fában (0 = felső szint). */
+    level: number;
+    /** Sablonból hozott hierarchikus sorszám, pl. „1.4.1.2”. */
+    wbs: string | null;
+    /** Összegző sor: a dátumai és a készültsége a gyerekekből gördülnek. */
+    is_group: boolean;
+    is_milestone: boolean;
+    /** Hány tényleges munkasor tartozik alá (csoportnál az ág mérete). */
+    leaf_count: number;
     starts_on: string | null;
     due_on: string | null;
     work_days: number | null;
@@ -62,6 +73,17 @@ export interface PhaseItem {
     depends_on: number[];
     dependencies: PhaseDependency[];
     resources: PhaseResource[];
+}
+
+/** Ütemterv-sablon a projektindításhoz (WBS-struktúra). */
+export interface PhaseTemplateInfo {
+    key: string;
+    name: string;
+    description: string;
+    row_count: number;
+    group_count: number;
+    is_default: boolean;
+    preview: string[];
 }
 
 export interface SubprojectItem {

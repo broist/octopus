@@ -176,16 +176,20 @@ class Project extends Model
     /**
      * Projekt-készültség: a saját fázisok átlaga; ha nincsenek, az
      * alprojektek fázisainak átlaga.
+     *
+     * Az összegző (csoport) sorok kimaradnak: azok készültsége maga is a
+     * gyerekek átlaga, tehát kétszer számítanának bele.
      */
     public function progress(): int
     {
         $phases = $this->relationLoaded('phases') ? $this->phases : $this->phases()->get();
+        $work = $phases->where('is_group', false);
 
-        if ($phases->isNotEmpty()) {
-            return (int) round($phases->avg('progress'));
+        if ($work->isNotEmpty()) {
+            return (int) round($work->avg('progress'));
         }
 
-        $subAvg = $this->subprojectPhases()->avg('progress');
+        $subAvg = $this->subprojectPhases()->where('is_group', false)->avg('progress');
         if ($subAvg !== null) {
             return (int) round((float) $subAvg);
         }

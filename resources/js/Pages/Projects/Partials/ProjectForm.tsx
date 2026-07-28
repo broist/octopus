@@ -1,10 +1,10 @@
 import { FormEventHandler, useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { Plus } from 'lucide-react';
+import { FolderTree, Plus } from 'lucide-react';
 import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
-import type { Option } from '@/types/models';
+import type { Option, PhaseTemplateInfo } from '@/types/models';
 
 export interface ProjectFormData {
     parent_id: number | null;
@@ -19,6 +19,8 @@ export interface ProjectFormData {
     starts_on: string;
     ends_on: string;
     description: string;
+    /** Új projektnél betöltendő ütemterv-sablon (üres = üres ütemterv). */
+    phase_template: string;
 }
 
 interface ProjectFormProps {
@@ -33,6 +35,8 @@ interface ProjectFormProps {
     types: Record<string, string>;
     submitLabel: string;
     cancelUrl: string;
+    /** Csak új projektnél: választható ütemterv-sablonok. */
+    phaseTemplates?: PhaseTemplateInfo[];
 }
 
 const selectClass =
@@ -50,6 +54,7 @@ export default function ProjectForm({
     types,
     submitLabel,
     cancelUrl,
+    phaseTemplates,
 }: ProjectFormProps) {
     // Gyors megrendelő-felvétel (a teljes partnerkezelés a CRM modulban jön).
     const [clientOptions, setClientOptions] = useState<Option[]>(clients);
@@ -57,6 +62,8 @@ export default function ProjectForm({
     const [quickName, setQuickName] = useState('');
     const [quickBusy, setQuickBusy] = useState(false);
     const [quickError, setQuickError] = useState<string | null>(null);
+
+    const chosenTemplate = phaseTemplates?.find((t) => t.key === data.phase_template);
 
     const addQuickClient = async () => {
         if (!quickName.trim()) return;
@@ -272,6 +279,41 @@ export default function ProjectForm({
                     <InputError message={errors.description} />
                 </div>
             </div>
+
+            {phaseTemplates && phaseTemplates.length > 0 && (
+                <div className="mt-6 border-t border-line pt-5">
+                    <InputLabel htmlFor="phase_template" value="Induló ütemterv" />
+                    <p className="mb-2 text-xs text-ink-faint">
+                        A kiválasztott munkastruktúra rögtön betöltődik a projekt Ütemterv fülére.
+                        Onnan a nem szükséges sorok — akár egész csoportok — törölhetők, és
+                        természetesen saját fázisok is felvehetők.
+                    </p>
+                    <select
+                        id="phase_template"
+                        value={data.phase_template}
+                        onChange={(e) => setData('phase_template', e.target.value)}
+                        className={selectClass}
+                    >
+                        <option value="">– Üres ütemterv (fázisokat kézzel viszek fel) –</option>
+                        {phaseTemplates.map((t) => (
+                            <option key={t.key} value={t.key}>
+                                {t.name} — {t.row_count} sor
+                            </option>
+                        ))}
+                    </select>
+                    <InputError message={errors.phase_template} />
+
+                    {chosenTemplate && (
+                        <div className="mt-2 flex gap-2 rounded-md border border-accent-100 bg-accent-50/60 px-3 py-2 text-xs leading-relaxed text-accent-700">
+                            <FolderTree size={14} className="mt-0.5 shrink-0" />
+                            <span>
+                                {chosenTemplate.description} — {chosenTemplate.row_count} sor, ebből{' '}
+                                {chosenTemplate.group_count} összegző csoport.
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="mt-6 flex items-center gap-3 border-t border-line pt-5">
                 <button type="submit" className="btn-primary" disabled={processing}>

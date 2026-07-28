@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,8 +23,13 @@ class ProjectPhase extends Model
 
     protected $fillable = [
         'project_id',
+        'parent_id',
         'name',
         'sort_order',
+        'level',
+        'wbs',
+        'is_group',
+        'is_milestone',
         'starts_on',
         'due_on',
         'work_days',
@@ -40,12 +46,28 @@ class ProjectPhase extends Model
             'completed_on' => 'date:Y-m-d',
             'progress' => 'integer',
             'work_days' => 'integer',
+            'level' => 'integer',
+            'is_group' => 'boolean',
+            'is_milestone' => 'boolean',
         ];
     }
 
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * A fölérendelt összegző sor (ütemterv-sablonból hozott munkastruktúra).
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order');
     }
 
     /**
@@ -77,6 +99,16 @@ class ProjectPhase extends Model
     public function resources(): HasMany
     {
         return $this->hasMany(PhaseResource::class)->orderBy('id');
+    }
+
+    /**
+     * Csak a tényleges munkasorok. Az összegző (csoport) sorok a sablonból
+     * hozott munkastruktúra fejlécei: nincs saját határidejük és készültségük,
+     * ezért a határidő-figyelésbe és a riportokba nem valók.
+     */
+    public function scopeWork(Builder $query): void
+    {
+        $query->where('is_group', false);
     }
 
     /**

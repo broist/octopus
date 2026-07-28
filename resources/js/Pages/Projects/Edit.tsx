@@ -44,6 +44,9 @@ export default function Edit() {
         starts_on: project.starts_on ?? '',
         ends_on: project.ends_on ?? '',
         description: project.description ?? '',
+        // Sablont csak új projektnél lehet választani — az ütemterv a projekt
+        // Ütemterv fülén szerkeszthető.
+        phase_template: '',
     });
 
     const submit = (e: React.FormEvent) => {

@@ -1,347 +1,37 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowDown,
     ArrowUp,
     CalendarCog,
+    ChevronDown,
+    ChevronRight,
+    Diamond,
+    FolderTree,
     HardHat,
+    ListPlus,
     Pencil,
     Plus,
+    Search,
     Trash2,
     Truck,
     Wrench,
     X,
 } from 'lucide-react';
 import clsx from 'clsx';
-import InputLabel from '@/Components/ui/InputLabel';
-import TextInput from '@/Components/ui/TextInput';
-import InputError from '@/Components/ui/InputError';
 import ProgressBar from '@/Components/ProgressBar';
 import { fmtDate } from '@/lib/format';
-import { endFromStart, nonWorkdayLabel, workdaysBetween } from '@/lib/workday';
-import type {
-    DepType,
-    PhaseDependency,
-    PhaseItem,
-    PhaseResource,
-    ResourceKind,
-} from '@/types/models';
+import { conflictsFor, depNotation, matchingIds, normalize, phaseRef, selectionSize } from '@/lib/phases';
+import PhaseFields, {
+    emptyPhaseForm,
+    toFormData,
+    type PhaseFormData,
+} from '@/Pages/Projects/Partials/PhaseForm';
+import type { PhaseItem, PhaseResource, PhaseTemplateInfo } from '@/types/models';
 
-const DEP_TYPES: { value: DepType; label: string }[] = [
-    { value: 'bk', label: 'BK · Befejezés→Kezdés' },
-    { value: 'kk', label: 'KK · Kezdés→Kezdés' },
-    { value: 'bb', label: 'BB · Befejezés→Befejezés' },
-    { value: 'kb', label: 'KB · Kezdés→Befejezés' },
-];
-
-const RESOURCE_KINDS: { value: ResourceKind; label: string }[] = [
-    { value: 'kezi', label: 'Kézi erő' },
-    { value: 'gepi', label: 'Gépi erő' },
-];
-
-interface PhaseFormData {
-    name: string;
-    starts_on: string;
-    due_on: string;
-    work_days: number | '';
-    progress: number;
-    depends_on: PhaseDependency[];
-    resources: PhaseResource[];
-    [key: string]: string | number | PhaseDependency[] | PhaseResource[];
-}
-
-const inputCls =
-    'block w-full rounded-md border-line bg-white py-1.5 text-sm focus:border-accent focus:ring-accent/40';
-
-/** A függőség rövid jelölése, pl. „2BK+1". */
-export function depNotation(seq: number, type: DepType, lag: number): string {
-    const sign = lag > 0 ? `+${lag}` : lag < 0 ? `${lag}` : '';
-    return `${seq}${type.toUpperCase()}${sign}`;
-}
-
-function NonWorkdayHint({ value }: { value: string }) {
-    const label = nonWorkdayLabel(value);
-    if (!label) return null;
-    return (
-        <p className="mt-1 flex items-center gap-1 text-xs text-amberwarn">
-            <AlertTriangle size={12} />
-            Figyelem: {label} (nem munkanap)
-        </p>
-    );
-}
-
-function PhaseFields({
-    form,
-    options,
-}: {
-    form: ReturnType<typeof useForm<PhaseFormData>>;
-    options: PhaseItem[];
-}) {
-    const d = form.data;
-
-    const setStart = (v: string) => {
-        form.setData('starts_on', v);
-        if (v && d.due_on) form.setData('work_days', workdaysBetween(v, d.due_on));
-        else if (v && d.work_days) form.setData('due_on', endFromStart(v, Number(d.work_days)));
-    };
-    const setDue = (v: string) => {
-        form.setData('due_on', v);
-        if (d.starts_on && v) form.setData('work_days', workdaysBetween(d.starts_on, v));
-    };
-    const setWorkDays = (v: string) => {
-        const n = v === '' ? '' : Math.max(1, Number(v));
-        form.setData('work_days', n);
-        if (d.starts_on && n) form.setData('due_on', endFromStart(d.starts_on, Number(n)));
-    };
-
-    const depFor = (id: number) => d.depends_on.find((x) => x.id === id);
-    const toggleDep = (id: number) => {
-        form.setData(
-            'depends_on',
-            depFor(id)
-                ? d.depends_on.filter((x) => x.id !== id)
-                : [...d.depends_on, { id, type: 'bk', lag: 0 }],
-        );
-    };
-    const setDep = (id: number, patch: Partial<PhaseDependency>) => {
-        form.setData(
-            'depends_on',
-            d.depends_on.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        );
-    };
-
-    const addResource = () =>
-        form.setData('resources', [
-            ...d.resources,
-            { kind: 'kezi', name: '', quantity: 1, work_days: 1, note: '' },
-        ]);
-    const setResource = (i: number, patch: Partial<PhaseResource>) =>
-        form.setData(
-            'resources',
-            d.resources.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
-        );
-    const removeResource = (i: number) =>
-        form.setData(
-            'resources',
-            d.resources.filter((_, idx) => idx !== i),
-        );
-
-    return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="lg:col-span-2">
-                    <InputLabel value="Fázis neve *" />
-                    <TextInput
-                        value={d.name}
-                        onChange={(e) => form.setData('name', e.target.value)}
-                        placeholder="pl. Alapozás"
-                    />
-                    <InputError message={form.errors.name} />
-                </div>
-                <div className="sm:col-span-2">
-                    <InputLabel value={`Készültség: ${d.progress}%`} />
-                    <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={d.progress}
-                        onChange={(e) => form.setData('progress', Number(e.target.value))}
-                        className="mt-2 w-full accent-[#2E6B4F]"
-                    />
-                </div>
-                <div>
-                    <InputLabel value="Kezdés" />
-                    <input
-                        type="date"
-                        value={d.starts_on}
-                        onChange={(e) => setStart(e.target.value)}
-                        className={inputCls}
-                    />
-                    <InputError message={form.errors.starts_on} />
-                    {d.starts_on && <NonWorkdayHint value={d.starts_on} />}
-                </div>
-                <div>
-                    <InputLabel value="Munkanapok" />
-                    <input
-                        type="number"
-                        min={1}
-                        value={d.work_days}
-                        onChange={(e) => setWorkDays(e.target.value)}
-                        className={inputCls}
-                        placeholder="pl. 6"
-                    />
-                    <InputError message={form.errors.work_days} />
-                </div>
-                <div>
-                    <InputLabel value="Határidő" />
-                    <input
-                        type="date"
-                        value={d.due_on}
-                        onChange={(e) => setDue(e.target.value)}
-                        className={inputCls}
-                    />
-                    <InputError message={form.errors.due_on} />
-                    {d.due_on && <NonWorkdayHint value={d.due_on} />}
-                </div>
-            </div>
-
-            {/* Függőségek */}
-            <div>
-                <InputLabel value="Függőségek (mire vár ez a fázis)" />
-                {options.length === 0 ? (
-                    <p className="text-xs text-ink-faint">Még nincs másik fázis, amire várhatna.</p>
-                ) : (
-                    <div className="space-y-1.5">
-                        {options.map((o) => {
-                            const dep = depFor(o.id);
-                            return (
-                                <div
-                                    key={o.id}
-                                    className={clsx(
-                                        'flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm',
-                                        dep ? 'border-accent/40 bg-accent-50/40' : 'border-line bg-white',
-                                    )}
-                                >
-                                    <label className="flex items-center gap-1.5">
-                                        <input
-                                            type="checkbox"
-                                            checked={!!dep}
-                                            onChange={() => toggleDep(o.id)}
-                                            className="rounded-sm border-line text-accent focus:ring-accent/40"
-                                        />
-                                        <span className="font-mono text-xs text-ink-faint">#{o.seq}</span>
-                                        <span className="text-ink">{o.name}</span>
-                                    </label>
-                                    {dep && (
-                                        <div className="ml-auto flex items-center gap-2">
-                                            <select
-                                                value={dep.type}
-                                                onChange={(e) =>
-                                                    setDep(o.id, { type: e.target.value as DepType })
-                                                }
-                                                className="rounded-md border-line py-1 text-xs focus:border-accent focus:ring-accent/30"
-                                            >
-                                                {DEP_TYPES.map((t) => (
-                                                    <option key={t.value} value={t.value}>
-                                                        {t.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-xs text-ink-faint">eltolás</span>
-                                                <input
-                                                    type="number"
-                                                    value={dep.lag}
-                                                    onChange={(e) =>
-                                                        setDep(o.id, { lag: Number(e.target.value) || 0 })
-                                                    }
-                                                    className="w-16 rounded-md border-line py-1 text-right text-xs focus:border-accent focus:ring-accent/30"
-                                                />
-                                                <span className="text-xs text-ink-faint">nap</span>
-                                            </div>
-                                            <span className="rounded bg-sidebar/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-sidebar">
-                                                {depNotation(o.seq, dep.type, dep.lag)}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-                <InputError message={form.errors.depends_on as string | undefined} />
-            </div>
-
-            {/* Erőforrások */}
-            <div>
-                <div className="mb-1 flex items-center justify-between">
-                    <InputLabel value="Erőforrások" className="mb-0" />
-                    <button
-                        type="button"
-                        onClick={addResource}
-                        className="flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-700"
-                    >
-                        <Plus size={13} />
-                        Erőforrás
-                    </button>
-                </div>
-                {d.resources.length === 0 ? (
-                    <p className="text-xs text-ink-faint">
-                        Nincs erőforrás. Pl. „3 fő kézi erő, 2 munkanap" vagy „1 gép kezelővel, 1 nap".
-                    </p>
-                ) : (
-                    <div className="space-y-1.5">
-                        {d.resources.map((r, i) => (
-                            <div
-                                key={i}
-                                className="grid grid-cols-2 items-center gap-2 rounded-md border border-line bg-white px-2.5 py-1.5 sm:grid-cols-12"
-                            >
-                                <select
-                                    value={r.kind}
-                                    onChange={(e) => setResource(i, { kind: e.target.value as ResourceKind })}
-                                    className="rounded-md border-line py-1 text-xs focus:border-accent focus:ring-accent/30 sm:col-span-2"
-                                >
-                                    {RESOURCE_KINDS.map((k) => (
-                                        <option key={k.value} value={k.value}>
-                                            {k.label}
-                                        </option>
-                                    ))}
-                                </select>
-                                <input
-                                    value={r.name}
-                                    onChange={(e) => setResource(i, { name: e.target.value })}
-                                    placeholder="Megnevezés (pl. kőműves)"
-                                    className="rounded-md border-line py-1 text-sm focus:border-accent focus:ring-accent/30 sm:col-span-4"
-                                />
-                                <div className="flex items-center gap-1 sm:col-span-2">
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={r.quantity}
-                                        onChange={(e) => setResource(i, { quantity: Number(e.target.value) || 1 })}
-                                        className="w-full rounded-md border-line py-1 text-right text-xs focus:border-accent focus:ring-accent/30"
-                                    />
-                                    <span className="text-xs text-ink-faint">db/fő</span>
-                                </div>
-                                <div className="flex items-center gap-1 sm:col-span-2">
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={r.work_days}
-                                        onChange={(e) => setResource(i, { work_days: Number(e.target.value) || 1 })}
-                                        className="w-full rounded-md border-line py-1 text-right text-xs focus:border-accent focus:ring-accent/30"
-                                    />
-                                    <span className="text-xs text-ink-faint">nap</span>
-                                </div>
-                                <div className="flex items-center gap-1 sm:col-span-2">
-                                    <input
-                                        value={r.note ?? ''}
-                                        onChange={(e) => setResource(i, { note: e.target.value })}
-                                        placeholder="megj."
-                                        className="w-full rounded-md border-line py-1 text-xs focus:border-accent focus:ring-accent/30"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => removeResource(i)}
-                                        className="shrink-0 rounded p-1 text-ink-faint hover:text-coral"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-function toFormDeps(phase: PhaseItem): PhaseDependency[] {
-    return phase.dependencies.map((x) => ({ id: x.id, type: x.type, lag: x.lag }));
-}
+/** Mennyivel tolódik beljebb egy szint a fában. */
+const INDENT = 16;
 
 function ResourceChips({ resources }: { resources: PhaseResource[] }) {
     if (resources.length === 0) return null;
@@ -360,142 +50,233 @@ function ResourceChips({ resources }: { resources: PhaseResource[] }) {
     );
 }
 
-function PhaseRow({
+/**
+ * Egy fázis szerkesztő űrlapja. Csak a szerkesztett sorra épül fel — egy
+ * sablonból betöltött ütemterv több száz soros, ott soronkénti űrlapállapot
+ * feleslegesen terhelné a felületet.
+ */
+function PhaseEditor({
     phase,
-    allPhases,
-    canEdit,
-    isFirst,
-    isLast,
-    conflictWith,
+    options,
+    onClose,
 }: {
     phase: PhaseItem;
-    allPhases: PhaseItem[];
-    canEdit: boolean;
-    isFirst: boolean;
-    isLast: boolean;
-    conflictWith: string[];
+    options: PhaseItem[];
+    onClose: () => void;
 }) {
-    const [editing, setEditing] = useState(false);
+    const form = useForm<PhaseFormData>(toFormData(phase));
 
-    const form = useForm<PhaseFormData>({
-        name: phase.name,
-        starts_on: phase.starts_on ?? '',
-        due_on: phase.due_on ?? '',
-        work_days: phase.work_days ?? '',
-        progress: phase.progress,
-        depends_on: toFormDeps(phase),
-        resources: phase.resources.map((r) => ({ ...r })),
-    });
-
-    const save = () => {
+    const save = () =>
         form.put(route('projects.phases.update', phase.id), {
             preserveScroll: true,
-            onSuccess: () => setEditing(false),
+            onSuccess: onClose,
         });
-    };
-    const move = (direction: 'up' | 'down') =>
-        router.post(route('projects.phases.move', phase.id), { direction }, { preserveScroll: true });
+
     const compute = () =>
         router.post(route('projects.phases.compute', phase.id), {}, { preserveScroll: true });
+
+    return (
+        <div className="border-t border-line bg-cream/50 px-4 py-4">
+            <PhaseFields form={form} options={options} groups={[]} isGroup={phase.is_group} />
+            <div className="mt-4 flex flex-wrap gap-2">
+                <button className="btn-primary px-4 py-1.5 text-xs" onClick={save} disabled={form.processing}>
+                    Mentés
+                </button>
+                {!phase.is_group && phase.dependencies.length > 0 && (
+                    <button
+                        type="button"
+                        className="btn-ghost px-3 py-1.5 text-xs"
+                        onClick={compute}
+                        title="A kezdő- és végdátum kiszámítása a függőségekből"
+                    >
+                        <CalendarCog size={13} />
+                        Dátumok a függőségekből
+                    </button>
+                )}
+                <button
+                    className="btn-ghost px-4 py-1.5 text-xs"
+                    onClick={() => {
+                        form.reset();
+                        form.clearErrors();
+                        onClose();
+                    }}
+                >
+                    <X size={13} />
+                    Mégse
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function PhaseRow({
+    phase,
+    depLabels,
+    conflictWith,
+    canEdit,
+    hasChildren,
+    isOpen,
+    isSelected,
+    canMoveUp,
+    canMoveDown,
+    subtreeSize,
+    onToggleOpen,
+    onToggleSelect,
+    onEdit,
+}: {
+    phase: PhaseItem;
+    depLabels: string;
+    conflictWith: string[];
+    canEdit: boolean;
+    hasChildren: boolean;
+    isOpen: boolean;
+    isSelected: boolean;
+    canMoveUp: boolean;
+    canMoveDown: boolean;
+    subtreeSize: number;
+    onToggleOpen: () => void;
+    onToggleSelect: () => void;
+    onEdit: () => void;
+}) {
+    const move = (direction: 'up' | 'down') =>
+        router.post(route('projects.phases.move', phase.id), { direction }, { preserveScroll: true });
+
     const remove = () => {
-        if (confirm(`Biztosan törli a(z) „${phase.name}” fázist?`)) {
+        const question = phase.is_group && subtreeSize > 1
+            ? `Biztosan törli a(z) „${phase.name}” csoportot? A teljes ága törlődik — ${subtreeSize} sor.`
+            : `Biztosan törli a(z) „${phase.name}” fázist?`;
+
+        if (confirm(question)) {
             router.delete(route('projects.phases.destroy', phase.id), { preserveScroll: true });
         }
     };
 
-    const byId = new Map(allPhases.map((p) => [p.id, p]));
-    const depLabels = phase.dependencies
-        .map((dep) => {
-            const pre = byId.get(dep.id);
-            return pre ? depNotation(pre.seq, dep.type, dep.lag) : null;
-        })
-        .filter(Boolean)
-        .join(', ');
-
-    if (editing) {
-        return (
-            <div className="border-t border-line bg-cream/50 px-4 py-4">
-                <PhaseFields form={form} options={allPhases.filter((p) => p.id !== phase.id)} />
-                <div className="mt-4 flex flex-wrap gap-2">
-                    <button className="btn-primary px-4 py-1.5 text-xs" onClick={save} disabled={form.processing}>
-                        Mentés
-                    </button>
-                    {phase.dependencies.length > 0 && (
-                        <button
-                            type="button"
-                            className="btn-ghost px-3 py-1.5 text-xs"
-                            onClick={compute}
-                            title="A kezdő- és végdátum kiszámítása a függőségekből"
-                        >
-                            <CalendarCog size={13} />
-                            Dátumok a függőségekből
-                        </button>
-                    )}
-                    <button
-                        className="btn-ghost px-4 py-1.5 text-xs"
-                        onClick={() => {
-                            form.reset();
-                            form.clearErrors();
-                            setEditing(false);
-                        }}
-                    >
-                        <X size={13} />
-                        Mégse
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    const hasDates = phase.starts_on !== null || phase.due_on !== null;
 
     return (
-        <div className="flex flex-col gap-2 border-t border-line px-4 py-3 sm:flex-row sm:items-start">
-            <span className="mt-0.5 hidden w-6 shrink-0 text-right font-mono text-xs text-ink-faint sm:block">
-                {phase.seq}.
-            </span>
-            <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate text-sm font-medium text-ink">
-                        <span className="mr-1 font-mono text-xs text-ink-faint sm:hidden">{phase.seq}.</span>
-                        {phase.name}
-                    </span>
-                    {phase.is_overdue && <span className="chip chip-coral">Csúszik</span>}
-                    {phase.progress === 100 && <span className="chip chip-green">Kész</span>}
-                    {conflictWith.length > 0 && (
-                        <span
-                            className="chip inline-flex items-center gap-1 bg-coral/15 text-coral"
-                            title={`Ütközés / párhuzam: ${conflictWith.join(', ')}`}
-                        >
-                            <AlertTriangle size={11} />
-                            Ütközés
+        <div
+            className={clsx(
+                'flex flex-col gap-2 border-t border-line py-2 pr-3 sm:flex-row sm:items-center',
+                phase.is_group ? 'bg-cream/40' : 'bg-white',
+                isSelected && 'bg-coral/5',
+            )}
+        >
+            <div
+                className="flex min-w-0 flex-1 items-start gap-1.5"
+                style={{ paddingLeft: 10 + phase.level * INDENT }}
+            >
+                {canEdit && (
+                    <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={onToggleSelect}
+                        className="mt-1 shrink-0 rounded-sm border-line text-coral focus:ring-coral/40"
+                        aria-label={`${phase.name} kijelölése`}
+                    />
+                )}
+
+                {hasChildren ? (
+                    <button
+                        type="button"
+                        onClick={onToggleOpen}
+                        className="mt-0.5 shrink-0 rounded p-0.5 text-ink-faint hover:bg-line/60 hover:text-ink"
+                        aria-label={isOpen ? 'Becsukás' : 'Kinyitás'}
+                    >
+                        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                ) : (
+                    <span className="mt-0.5 w-[22px] shrink-0" />
+                )}
+
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="shrink-0 font-mono text-[11px] text-ink-faint">
+                            {phaseRef(phase)}
                         </span>
+                        <span
+                            className={clsx(
+                                'min-w-0 text-sm',
+                                phase.is_group ? 'font-semibold text-sidebar' : 'text-ink',
+                            )}
+                        >
+                            {phase.name}
+                        </span>
+                        {phase.is_milestone && (
+                            <span className="chip chip-grey shrink-0">
+                                <Diamond size={10} />
+                                Mérföldkő
+                            </span>
+                        )}
+                        {phase.is_group && (
+                            <span className="shrink-0 text-[11px] text-ink-faint">
+                                {phase.leaf_count} munkasor
+                            </span>
+                        )}
+                        {phase.is_overdue && <span className="chip chip-coral shrink-0">Csúszik</span>}
+                        {!phase.is_group && phase.progress === 100 && (
+                            <span className="chip chip-green shrink-0">Kész</span>
+                        )}
+                        {conflictWith.length > 0 && (
+                            <span
+                                className="chip inline-flex shrink-0 items-center gap-1 bg-coral/15 text-coral"
+                                title={`Ütközés / párhuzam: ${conflictWith.join(', ')}`}
+                            >
+                                <AlertTriangle size={11} />
+                                Ütközés
+                            </span>
+                        )}
+                    </div>
+
+                    {(hasDates || depLabels) && (
+                        <div className="mt-0.5 text-xs text-ink-faint">
+                            {hasDates && `${fmtDate(phase.starts_on)} – ${fmtDate(phase.due_on)}`}
+                            {phase.work_days ? <span> · {phase.work_days} munkanap</span> : null}
+                            {depLabels && <span> · vár: {depLabels}</span>}
+                        </div>
                     )}
+
+                    <ResourceChips resources={phase.resources} />
                 </div>
-                <div className="mt-0.5 text-xs text-ink-faint">
-                    {fmtDate(phase.starts_on)} – {fmtDate(phase.due_on)}
-                    {phase.work_days ? <span> · {phase.work_days} munkanap</span> : null}
-                    {depLabels && <span> · vár: {depLabels}</span>}
-                </div>
-                <ResourceChips resources={phase.resources} />
             </div>
 
-            <div className="flex w-full items-center gap-2 sm:w-48">
+            <div className="flex w-full shrink-0 items-center gap-2 sm:w-40">
                 <ProgressBar value={phase.progress} warn={phase.is_overdue} className="flex-1" />
-                <span className="w-9 text-right text-xs font-medium text-ink-soft">{phase.progress}%</span>
+                <span className="w-9 text-right text-xs font-medium text-ink-soft">
+                    {phase.progress}%
+                </span>
             </div>
 
             {canEdit && (
-                <div className="flex items-center gap-0.5 text-ink-faint">
-                    <button onClick={() => move('up')} disabled={isFirst} className="rounded p-1.5 hover:bg-cream hover:text-ink disabled:opacity-30" aria-label="Feljebb">
-                        <ArrowUp size={15} />
+                <div className="flex shrink-0 items-center gap-0.5 text-ink-faint">
+                    <button
+                        onClick={() => move('up')}
+                        disabled={!canMoveUp}
+                        className="rounded p-1 hover:bg-cream hover:text-ink disabled:opacity-30"
+                        aria-label="Feljebb"
+                    >
+                        <ArrowUp size={14} />
                     </button>
-                    <button onClick={() => move('down')} disabled={isLast} className="rounded p-1.5 hover:bg-cream hover:text-ink disabled:opacity-30" aria-label="Lejjebb">
-                        <ArrowDown size={15} />
+                    <button
+                        onClick={() => move('down')}
+                        disabled={!canMoveDown}
+                        className="rounded p-1 hover:bg-cream hover:text-ink disabled:opacity-30"
+                        aria-label="Lejjebb"
+                    >
+                        <ArrowDown size={14} />
                     </button>
-                    <button onClick={() => setEditing(true)} className="rounded p-1.5 hover:bg-cream hover:text-ink" aria-label="Szerkesztés">
-                        <Pencil size={15} />
+                    <button
+                        onClick={onEdit}
+                        className="rounded p-1 hover:bg-cream hover:text-ink"
+                        aria-label="Szerkesztés"
+                    >
+                        <Pencil size={14} />
                     </button>
-                    <button onClick={remove} className="rounded p-1.5 hover:bg-coral/10 hover:text-coral" aria-label="Törlés">
-                        <Trash2 size={15} />
+                    <button
+                        onClick={remove}
+                        className="rounded p-1 hover:bg-coral/10 hover:text-coral"
+                        aria-label="Törlés"
+                    >
+                        <Trash2 size={14} />
                     </button>
                 </div>
             )}
@@ -503,43 +284,216 @@ function PhaseRow({
     );
 }
 
-/** Ütközés-számítás: mely elődökkel fut párhuzamosan (átfedő időszak). */
-export function conflictsFor(phase: PhaseItem, byId: Map<number, PhaseItem>): string[] {
-    if (!phase.starts_on || !phase.due_on) return [];
-    const out: string[] = [];
-    for (const dep of phase.dependencies) {
-        const pre = byId.get(dep.id);
-        if (!pre || !pre.starts_on || !pre.due_on) continue;
-        // BK: az utódnak az előd befejezése UTÁN kellene kezdődnie.
-        if (dep.type === 'bk' && phase.starts_on <= pre.due_on) {
-            out.push(`#${pre.seq} ${pre.name}`);
+/** Ütemterv-sablon betöltése: kész munkastruktúra, amiből utána törölhetünk. */
+function TemplateLoader({
+    projectId,
+    templates,
+    hasPhases,
+    onDone,
+}: {
+    projectId: number;
+    templates: PhaseTemplateInfo[];
+    hasPhases: boolean;
+    onDone: () => void;
+}) {
+    const [key, setKey] = useState(templates.find((t) => t.is_default)?.key ?? templates[0]?.key ?? '');
+    const [replace, setReplace] = useState(false);
+    const [busy, setBusy] = useState(false);
+
+    const chosen = templates.find((t) => t.key === key);
+
+    const load = () => {
+        if (replace && !confirm('A jelenlegi ütemterv minden sora törlődik, és a sablon lép a helyébe. Folytatja?')) {
+            return;
         }
+
+        setBusy(true);
+        router.post(
+            route('projects.phases.template', projectId),
+            { template: key, replace },
+            { preserveScroll: true, onFinish: () => setBusy(false), onSuccess: onDone },
+        );
+    };
+
+    if (templates.length === 0) {
+        return (
+            <p className="text-sm text-ink-faint">
+                Nincs elérhető ütemterv-sablon.
+            </p>
+        );
     }
-    return out;
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                    className="block w-full rounded-md border-line bg-white py-1.5 text-sm focus:border-accent focus:ring-accent/40 sm:max-w-sm"
+                >
+                    {templates.map((t) => (
+                        <option key={t.key} value={t.key}>
+                            {t.name} ({t.row_count} sor)
+                        </option>
+                    ))}
+                </select>
+                <button className="btn-primary shrink-0 px-4 py-1.5 text-xs" onClick={load} disabled={busy || !key}>
+                    <FolderTree size={14} />
+                    Sablon betöltése
+                </button>
+            </div>
+
+            {chosen && (
+                <div className="text-xs leading-relaxed text-ink-soft">
+                    <p>{chosen.description}</p>
+                    <p className="mt-1 text-ink-faint">
+                        {chosen.row_count} sor, ebből {chosen.group_count} összegző csoport. Fő
+                        egységek: {chosen.preview.slice(0, 8).join(' · ')}
+                        {chosen.preview.length > 8 && ' …'}
+                    </p>
+                </div>
+            )}
+
+            {hasPhases && (
+                <label className="flex items-center gap-2 text-xs text-ink-soft">
+                    <input
+                        type="checkbox"
+                        checked={replace}
+                        onChange={(e) => setReplace(e.target.checked)}
+                        className="rounded-sm border-line text-coral focus:ring-coral/40"
+                    />
+                    A meglévő ütemterv cseréje (a mostani sorok törlődnek) — enélkül a sablon a
+                    lista végére kerül.
+                </label>
+            )}
+        </div>
+    );
 }
 
 export default function PhasesPanel({
     projectId,
     phases,
     canEdit,
+    templates,
 }: {
     projectId: number;
     phases: PhaseItem[];
     canEdit: boolean;
+    templates: PhaseTemplateInfo[];
 }) {
     const [adding, setAdding] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [templateOpen, setTemplateOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [expanded, setExpanded] = useState<Set<number>>(new Set());
+    const [selected, setSelected] = useState<Set<number>>(new Set());
 
-    const addForm = useForm<PhaseFormData>({
-        name: '',
-        starts_on: '',
-        due_on: '',
-        work_days: '',
-        progress: 0,
-        depends_on: [],
-        resources: [],
-    });
+    const addForm = useForm<PhaseFormData>(emptyPhaseForm());
 
-    const submitAdd = () => {
+    // Az újonnan megjelenő felső szintű csoportok egyszer automatikusan
+    // kinyílnak (pl. sablon betöltése után), a mélyebb szintek csukva maradnak
+    // — így egy 400+ soros ütemterv is áttekinthető marad.
+    const seen = useRef<Set<number>>(new Set());
+    useEffect(() => {
+        const fresh = phases.filter((p) => p.is_group && p.level === 0 && !seen.current.has(p.id));
+        phases.forEach((p) => seen.current.add(p.id));
+
+        if (fresh.length > 0) {
+            setExpanded((prev) => new Set([...prev, ...fresh.map((p) => p.id)]));
+        }
+    }, [phases]);
+
+    const byId = useMemo(() => new Map(phases.map((p) => [p.id, p])), [phases]);
+    const groups = useMemo(() => phases.filter((p) => p.is_group), [phases]);
+    const workRows = phases.length - groups.length;
+
+    /** Az ág mérete soronként (a sor + minden leszármazottja). */
+    const subtreeSize = useMemo(() => {
+        const size = new Map<number, number>();
+        for (let i = 0; i < phases.length; i++) {
+            let j = i + 1;
+            while (j < phases.length && phases[j].level > phases[i].level) j++;
+            size.set(phases[i].id, j - i);
+        }
+        return size;
+    }, [phases]);
+
+    const needle = normalize(query.trim());
+    const matches = useMemo(
+        () => (needle === '' ? null : matchingIds(phases, needle)),
+        [phases, needle],
+    );
+
+    /** A ténylegesen kirajzolt sorok: a becsukott ágak kimaradnak. */
+    const rows = useMemo(() => {
+        const out: PhaseItem[] = [];
+        let hiddenBelow: number | null = null;
+
+        for (const phase of phases) {
+            if (hiddenBelow !== null && phase.level > hiddenBelow) continue;
+            hiddenBelow = null;
+
+            if (matches && !matches.has(phase.id)) continue;
+
+            out.push(phase);
+
+            // Keresés közben mindent nyitva mutatunk, hogy a találat látszódjon.
+            if (!matches && phase.is_group && !expanded.has(phase.id)) {
+                hiddenBelow = phase.level;
+            }
+        }
+
+        return out;
+    }, [phases, expanded, matches]);
+
+    const selectedCount = useMemo(() => selectionSize(phases, selected), [phases, selected]);
+
+    const toggle = (set: Set<number>, id: number) => {
+        const next = new Set(set);
+        if (next.has(id)) {
+            next.delete(id);
+        } else {
+            next.add(id);
+        }
+        return next;
+    };
+
+    const toggleOpen = (id: number) => setExpanded((prev) => toggle(prev, id));
+    const toggleSelect = (id: number) => setSelected((prev) => toggle(prev, id));
+
+    const openGroupCount = groups.filter((g) => expanded.has(g.id)).length;
+
+    const allVisibleSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+    const toggleAllVisible = () =>
+        setSelected((prev) => {
+            const next = new Set(prev);
+            for (const row of rows) {
+                if (allVisibleSelected) {
+                    next.delete(row.id);
+                } else {
+                    next.add(row.id);
+                }
+            }
+            return next;
+        });
+
+    const deleteSelected = () => {
+        if (
+            !confirm(
+                `Biztosan törli a kijelölt sorokat? A csoportok teljes águkkal együtt törlődnek — összesen ${selectedCount} sor.`,
+            )
+        ) {
+            return;
+        }
+
+        router.delete(route('projects.phases.destroy-many', projectId), {
+            data: { ids: [...selected] },
+            preserveScroll: true,
+            onSuccess: () => setSelected(new Set()),
+        });
+    };
+
+    const submitAdd = () =>
         addForm.post(route('projects.phases.store', projectId), {
             preserveScroll: true,
             onSuccess: () => {
@@ -547,29 +501,104 @@ export default function PhasesPanel({
                 setAdding(false);
             },
         });
-    };
 
-    const byId = new Map(phases.map((p) => [p.id, p]));
+    const depLabelsFor = (phase: PhaseItem) =>
+        phase.dependencies
+            .map((dep) => {
+                const pre = byId.get(dep.id);
+                return pre ? depNotation(phaseRef(pre), dep.type, dep.lag) : null;
+            })
+            .filter(Boolean)
+            .join(', ');
+
+    /** Mozgatható-e: csak a testvérei között, a fa szerkezetének megtartásával. */
+    const siblingBounds = useMemo(() => {
+        const bounds = new Map<number, { first: boolean; last: boolean }>();
+        const byParent = new Map<number | null, PhaseItem[]>();
+
+        for (const phase of phases) {
+            const list = byParent.get(phase.parent_id) ?? [];
+            list.push(phase);
+            byParent.set(phase.parent_id, list);
+        }
+        for (const list of byParent.values()) {
+            list.forEach((p, i) =>
+                bounds.set(p.id, { first: i === 0, last: i === list.length - 1 }),
+            );
+        }
+
+        return bounds;
+    }, [phases]);
 
     return (
         <section className="o-card">
-            <header className="flex items-center justify-between px-4 py-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">
-                    Fázisok / mérföldkövek
-                </h2>
-                {canEdit && !adding && (
-                    <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setAdding(true)}>
-                        <Plus size={14} />
-                        Új fázis
-                    </button>
+            <header className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <div>
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">
+                        Ütemterv / munkastruktúra
+                    </h2>
+                    {phases.length > 0 && (
+                        <p className="mt-0.5 text-xs text-ink-faint">
+                            {phases.length} sor · {workRows} munkasor · {groups.length} csoport
+                        </p>
+                    )}
+                </div>
+
+                {canEdit && (
+                    <div className="flex flex-wrap items-center gap-2">
+                        {groups.length > 0 && (
+                            <button
+                                className="btn-ghost px-3 py-1.5 text-xs"
+                                onClick={() =>
+                                    setExpanded(
+                                        openGroupCount === groups.length
+                                            ? new Set()
+                                            : new Set(groups.map((g) => g.id)),
+                                    )
+                                }
+                            >
+                                {openGroupCount === groups.length ? 'Mind becsuk' : 'Mind kinyit'}
+                            </button>
+                        )}
+                        {phases.length > 0 && (
+                            <button
+                                className="btn-ghost px-3 py-1.5 text-xs"
+                                onClick={() => setTemplateOpen((v) => !v)}
+                            >
+                                <FolderTree size={14} />
+                                Sablon
+                            </button>
+                        )}
+                        {!adding && (
+                            <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setAdding(true)}>
+                                <Plus size={14} />
+                                Új fázis
+                            </button>
+                        )}
+                    </div>
                 )}
             </header>
 
+            {canEdit && templateOpen && phases.length > 0 && (
+                <div className="border-t border-line bg-cream/50 px-4 py-4">
+                    <TemplateLoader
+                        projectId={projectId}
+                        templates={templates}
+                        hasPhases
+                        onDone={() => setTemplateOpen(false)}
+                    />
+                </div>
+            )}
+
             {adding && (
                 <div className="border-t border-line bg-cream/50 px-4 py-4">
-                    <PhaseFields form={addForm} options={phases} />
+                    <PhaseFields form={addForm} options={phases} groups={groups} showParent />
                     <div className="mt-4 flex gap-2">
-                        <button className="btn-primary px-4 py-1.5 text-xs" onClick={submitAdd} disabled={addForm.processing}>
+                        <button
+                            className="btn-primary px-4 py-1.5 text-xs"
+                            onClick={submitAdd}
+                            disabled={addForm.processing}
+                        >
                             Fázis hozzáadása
                         </button>
                         <button
@@ -587,31 +616,140 @@ export default function PhasesPanel({
                 </div>
             )}
 
-            {phases.length === 0 && !adding ? (
-                <div className="border-t border-line px-4 py-8 text-center text-sm text-ink-faint">
-                    Még nincsenek fázisok. {canEdit && 'Adja hozzá az elsőt az „Új fázis" gombbal.'}
-                </div>
-            ) : (
-                phases.map((phase, i) => (
-                    <PhaseRow
-                        key={phase.id}
-                        phase={phase}
-                        allPhases={phases}
-                        canEdit={canEdit}
-                        isFirst={i === 0}
-                        isLast={i === phases.length - 1}
-                        conflictWith={conflictsFor(phase, byId)}
+            {phases.length > 12 && (
+                <div className="relative border-t border-line px-4 py-2">
+                    <Search size={14} className="pointer-events-none absolute left-6 top-4 text-ink-faint" />
+                    <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Keresés a fázisok között (név vagy sorszám)…"
+                        className="block w-full rounded-md border-line bg-white py-1.5 pl-8 text-sm focus:border-accent focus:ring-accent/40"
                     />
-                ))
+                    {query !== '' && (
+                        <button
+                            onClick={() => setQuery('')}
+                            className="absolute right-6 top-3.5 rounded p-0.5 text-ink-faint hover:text-ink"
+                            aria-label="Keresés törlése"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
             )}
 
-            {/* Jelmagyarázat a szerkesztéshez */}
+            {canEdit && selectedCount > 0 && (
+                <div className="flex flex-wrap items-center gap-3 border-t border-line bg-coral/10 px-4 py-2.5">
+                    <span className="text-sm font-medium text-ink">
+                        {selectedCount} sor kijelölve
+                    </span>
+                    <button
+                        onClick={deleteSelected}
+                        className="btn inline-flex border border-coral/40 bg-white px-3 py-1.5 text-xs text-coral hover:bg-coral/10"
+                    >
+                        <Trash2 size={13} />
+                        Kijelöltek törlése
+                    </button>
+                    <button
+                        onClick={() => setSelected(new Set())}
+                        className="text-xs font-medium text-ink-soft hover:text-ink"
+                    >
+                        Kijelölés megszüntetése
+                    </button>
+                </div>
+            )}
+
+            {phases.length === 0 ? (
+                <div className="border-t border-line px-4 py-8">
+                    <div className="mx-auto max-w-xl text-center">
+                        <ListPlus size={28} className="mx-auto text-ink-faint" />
+                        <h3 className="mt-2 text-sm font-semibold text-sidebar">
+                            Még nincs ütemterv
+                        </h3>
+                        <p className="mt-1 text-sm text-ink-soft">
+                            {canEdit
+                                ? 'Töltsön be egy kész munkastruktúrát, és törölje belőle a nem szükséges sorokat — vagy vegye fel a fázisokat egyesével az „Új fázis” gombbal.'
+                                : 'Ehhez a projekthez még nincsenek fázisok.'}
+                        </p>
+                    </div>
+
+                    {canEdit && (
+                        <div className="mx-auto mt-5 max-w-xl rounded-card border border-line bg-cream/50 p-4">
+                            <TemplateLoader
+                                projectId={projectId}
+                                templates={templates}
+                                hasPhases={false}
+                                onDone={() => setTemplateOpen(false)}
+                            />
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <>
+                    {canEdit && (
+                        <div
+                            className="flex items-center gap-2 border-t border-line bg-cream/60 py-1.5 pr-3"
+                            style={{ paddingLeft: 10 }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={allVisibleSelected}
+                                onChange={toggleAllVisible}
+                                className="shrink-0 rounded-sm border-line text-coral focus:ring-coral/40"
+                                aria-label="Látható sorok kijelölése"
+                            />
+                            <span className="text-[11px] uppercase tracking-wide text-ink-faint">
+                                {matches
+                                    ? `${rows.length} találat`
+                                    : 'A látható sorok kijelölése'}
+                            </span>
+                        </div>
+                    )}
+
+                    {rows.length === 0 ? (
+                        <div className="border-t border-line px-4 py-8 text-center text-sm text-ink-faint">
+                            Nincs a keresésre illeszkedő fázis.
+                        </div>
+                    ) : (
+                        rows.map((phase) => {
+                            const bounds = siblingBounds.get(phase.id);
+
+                            return editingId === phase.id ? (
+                                <PhaseEditor
+                                    key={phase.id}
+                                    phase={phase}
+                                    options={phases.filter((p) => p.id !== phase.id)}
+                                    onClose={() => setEditingId(null)}
+                                />
+                            ) : (
+                                <PhaseRow
+                                    key={phase.id}
+                                    phase={phase}
+                                    depLabels={depLabelsFor(phase)}
+                                    conflictWith={conflictsFor(phase, byId)}
+                                    canEdit={canEdit}
+                                    hasChildren={(subtreeSize.get(phase.id) ?? 1) > 1}
+                                    isOpen={expanded.has(phase.id)}
+                                    isSelected={selected.has(phase.id)}
+                                    canMoveUp={!(bounds?.first ?? true)}
+                                    canMoveDown={!(bounds?.last ?? true)}
+                                    subtreeSize={subtreeSize.get(phase.id) ?? 1}
+                                    onToggleOpen={() => toggleOpen(phase.id)}
+                                    onToggleSelect={() => toggleSelect(phase.id)}
+                                    onEdit={() => setEditingId(phase.id)}
+                                />
+                            );
+                        })
+                    )}
+                </>
+            )}
+
             {canEdit && phases.length > 0 && (
                 <div className="border-t border-line px-4 py-2.5 text-xs text-ink-faint">
                     <Wrench size={12} className="mr-1 inline" />
-                    Tipp: a munkanapok mezőbe a kezdéssel együtt beírt szám automatikusan kiszámolja a
-                    határidőt (hétvégék és ünnepek kihagyva). A függőségeknél a jelölés pl. „2BK+1" = a
-                    2. fázis befejezése után 1 munkanappal indul.
+                    Tipp: a csoportok dátuma és készültsége az alattuk lévő sorokból gördül fel. A
+                    munkanapok mezőbe a kezdéssel együtt beírt szám kiszámolja a határidőt (hétvégék
+                    és ünnepek kihagyva). A függőség jelölése pl. „1.4.2BK+1” = az 1.4.2 fázis
+                    befejezése után 1 munkanappal indul.
                 </div>
             )}
         </section>

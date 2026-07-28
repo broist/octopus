@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProjectRequest;
 use App\Models\Partner;
 use App\Models\Project;
+use App\Models\ProjectPhase;
 use App\Models\User;
+use App\Services\PhaseTemplateImporter;
+use App\Support\PhaseTemplates;
+use App\Support\PhaseTree;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,17 +37,25 @@ class ProjectController extends Controller
                 });
             })
             ->with(['client:id,name', 'projectManager:id,name'])
-            ->withCount(['subprojects', 'phases', 'subprojectPhases'])
-            ->withAvg('phases as phases_progress', 'progress')
-            ->withAvg('subprojectPhases as sub_phases_progress', 'progress')
+            // Az összegző (csoport) sorok nem önálló munkák: sem a darabszámba,
+            // sem a készültség-átlagba nem számítanak bele.
+            ->withCount([
+                'subprojects',
+                'phases' => fn ($q) => $q->where('is_group', false),
+                'subprojectPhases' => fn ($q) => $q->where('is_group', false),
+            ])
+            ->withAvg(['phases as phases_progress' => fn ($q) => $q->where('is_group', false)], 'progress')
+            ->withAvg(['subprojectPhases as sub_phases_progress' => fn ($q) => $q->where('is_group', false)], 'progress')
             ->withCount(['phases as overdue_count' => function ($q) {
-                $q->where('progress', '<', 100)
+                $q->where('is_group', false)
+                    ->where('progress', '<', 100)
                     ->whereNotNull('due_on')
                     ->whereDate('due_on', '<', today());
             }])
             // Az alprojektek csúszása a főprojektet is "Csúszik"-ra jelöli.
             ->withCount(['subprojectPhases as sub_overdue_count' => function ($q) {
-                $q->where('progress', '<', 100)
+                $q->where('is_group', false)
+                    ->where('progress', '<', 100)
                     ->whereNotNull('due_on')
                     ->whereDate('due_on', '<', today());
             }])
@@ -95,12 +107,18 @@ class ProjectController extends Controller
             ...$this->formOptions(),
             'parent' => $parent,
             'suggestedCode' => $this->suggestCode($parent['code'] ?? null),
+            'phaseTemplates' => PhaseTemplates::catalogue(),
+            // Új főprojekt alapból a standard ütemtervvel indul; alprojektnél
+            // ritkán kell a teljes struktúra, ezért ott üresen kezdünk.
+            'defaultPhaseTemplate' => $parent ? '' : PhaseTemplates::DEFAULT_KEY,
         ]);
     }
 
-    public function store(ProjectRequest $request): RedirectResponse
+    public function store(ProjectRequest $request, PhaseTemplateImporter $importer): RedirectResponse
     {
-        $project = Project::create($request->validated());
+        $data = $request->validated();
+
+        $project = Project::create(collect($data)->except('phase_template')->all());
 
         $project->logActivity('letrehozva', $project->parent_id
             ? "Alprojekt létrehozva: {$project->name}"
@@ -108,6 +126,22 @@ class ProjectController extends Controller
 
         if ($project->parent_id) {
             $project->parent->logActivity('alprojekt', "Új alprojekt: {$project->name}");
+        }
+
+        // Ütemterv-sablon: a kész munkastruktúra rögtön betöltődik, hogy ne
+        // üres ütemtervvel induljon a projekt (spec §6).
+        $template = ! empty($data['phase_template'])
+            ? PhaseTemplates::find($data['phase_template'])
+            : null;
+
+        if ($template !== null) {
+            $count = $importer->import($project, $template);
+            $project->logActivity('fazis', "Ütemterv-sablon betöltve: {$template['name']} ({$count} sor)");
+
+            return redirect()
+                ->route('projects.show', $project)
+                ->with('success', "A projekt létrejött, és a(z) „{$template['name']}” ütemterv betöltődött "
+                    ."({$count} sor). Az Ütemterv fülön törölje a nem szükséges sorokat.");
         }
 
         return redirect()
@@ -123,10 +157,12 @@ class ProjectController extends Controller
             'parent:id,code,name',
             'phases.dependencies:id',
             'phases.resources',
-            'subprojects' => fn ($q) => $q->withAvg('phases as phases_progress', 'progress')
-                ->withCount('phases')
+            'subprojects' => fn ($q) => $q
+                ->withAvg(['phases as phases_progress' => fn ($q) => $q->where('is_group', false)], 'progress')
+                ->withCount(['phases' => fn ($q) => $q->where('is_group', false)])
                 ->withCount(['phases as overdue_count' => function ($q) {
-                    $q->where('progress', '<', 100)
+                    $q->where('is_group', false)
+                        ->where('progress', '<', 100)
                         ->whereNotNull('due_on')
                         ->whereDate('due_on', '<', today());
                 }]),
@@ -155,32 +191,8 @@ class ProjectController extends Controller
                 'is_slipping' => $project->phases->contains(fn ($ph) => $ph->isOverdue())
                     || $project->subprojects->contains(fn ($sp) => $sp->overdue_count > 0),
             ],
-            'phases' => $project->phases->values()->map(fn ($ph, $i) => [
-                'id' => $ph->id,
-                'seq' => $i + 1,
-                'name' => $ph->name,
-                'sort_order' => $ph->sort_order,
-                'starts_on' => $ph->starts_on?->toDateString(),
-                'due_on' => $ph->due_on?->toDateString(),
-                'work_days' => $ph->work_days,
-                'progress' => $ph->progress,
-                'note' => $ph->note,
-                'is_overdue' => $ph->isOverdue(),
-                'depends_on' => $ph->dependencies->pluck('id')->values(),
-                'dependencies' => $ph->dependencies->map(fn ($d) => [
-                    'id' => $d->id,
-                    'type' => $d->pivot->dep_type,
-                    'lag' => (int) $d->pivot->lag_days,
-                ])->values(),
-                'resources' => $ph->resources->map(fn ($r) => [
-                    'id' => $r->id,
-                    'kind' => $r->kind,
-                    'name' => $r->name,
-                    'quantity' => $r->quantity,
-                    'work_days' => $r->work_days,
-                    'note' => $r->note,
-                ])->values(),
-            ])->values(),
+            'phases' => $this->phasePayload($project),
+            'phaseTemplates' => PhaseTemplates::catalogue(),
             'subprojects' => $project->subprojects->map(fn ($sp) => [
                 'id' => $sp->id,
                 'code' => $sp->code,
@@ -239,7 +251,7 @@ class ProjectController extends Controller
     {
         $oldStatus = $project->status;
 
-        $project->update($request->validated());
+        $project->update(collect($request->validated())->except('phase_template')->all());
 
         if ($project->wasChanged('status')) {
             $project->logActivity('statusz', sprintf(
@@ -296,6 +308,66 @@ class ProjectController extends Controller
     }
 
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Az ütemterv sorai a felületnek.
+     *
+     * A fázisok fát alkotnak (sablonból hozott munkastruktúra), ezért mélységi
+     * sorrendben megyünk végig rajtuk. Az összegző soroknak nincs saját dátuma
+     * és készültsége — azok a gyerekekből gördülnek fel (MS Project-logika).
+     *
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function phasePayload(Project $project)
+    {
+        $rollup = PhaseTree::rollup($project->phases);
+        $today = today()->toDateString();
+
+        return PhaseTree::flatten($project->phases)
+            ->values()
+            ->map(function (ProjectPhase $ph, int $i) use ($rollup, $today) {
+                $roll = $rollup[$ph->id] ?? null;
+
+                $startsOn = $ph->is_group ? ($roll['starts_on'] ?? null) : $ph->starts_on?->toDateString();
+                $dueOn = $ph->is_group ? ($roll['due_on'] ?? null) : $ph->due_on?->toDateString();
+                $progress = $ph->is_group ? ($roll['progress'] ?? 0) : $ph->progress;
+
+                return [
+                    'id' => $ph->id,
+                    'seq' => $i + 1,
+                    'parent_id' => $ph->parent_id,
+                    'level' => $ph->level,
+                    'wbs' => $ph->wbs,
+                    'is_group' => $ph->is_group,
+                    'is_milestone' => $ph->is_milestone,
+                    'leaf_count' => $roll['leaf_count'] ?? ($ph->is_group ? 0 : 1),
+                    'name' => $ph->name,
+                    'sort_order' => $ph->sort_order,
+                    'starts_on' => $startsOn,
+                    'due_on' => $dueOn,
+                    'work_days' => $ph->work_days,
+                    'progress' => $progress,
+                    'note' => $ph->note,
+                    'is_overdue' => $ph->is_group
+                        ? ($dueOn !== null && $dueOn < $today && $progress < 100)
+                        : $ph->isOverdue(),
+                    'depends_on' => $ph->dependencies->pluck('id')->values(),
+                    'dependencies' => $ph->dependencies->map(fn ($d) => [
+                        'id' => $d->id,
+                        'type' => $d->pivot->dep_type,
+                        'lag' => (int) $d->pivot->lag_days,
+                    ])->values(),
+                    'resources' => $ph->resources->map(fn ($r) => [
+                        'id' => $r->id,
+                        'kind' => $r->kind,
+                        'name' => $r->name,
+                        'quantity' => $r->quantity,
+                        'work_days' => $r->work_days,
+                        'note' => $r->note,
+                    ])->values(),
+                ];
+            });
+    }
 
     /**
      * @return array<string, mixed>

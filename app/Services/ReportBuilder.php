@@ -262,6 +262,7 @@ class ReportBuilder
         $today = CarbonImmutable::today();
 
         return ProjectPhase::query()
+            ->work()
             ->whereIn('project_id', $this->scopeIds())
             ->whereNotNull('due_on')
             ->when($this->from, fn ($q) => $q->whereDate('due_on', '>=', $this->from->toDateString()))

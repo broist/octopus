@@ -99,6 +99,7 @@ class NotifyDeadlines extends Command
 
         // --- Ütemterv-fázisok ---
         $phases = ProjectPhase::query()
+            ->work()
             ->where('progress', '<', 100)
             ->whereNotNull('due_on')
             ->whereDate('due_on', '<=', $horizon)

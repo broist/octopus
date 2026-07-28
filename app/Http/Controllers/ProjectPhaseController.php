@@ -5,11 +5,15 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProjectPhaseRequest;
 use App\Models\Project;
 use App\Models\ProjectPhase;
+use App\Services\PhaseTemplateImporter;
 use App\Services\WorkdayCalendar;
+use App\Support\PhaseTemplates;
+use App\Support\PhaseTree;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ProjectPhaseController extends Controller
@@ -19,9 +23,17 @@ class ProjectPhaseController extends Controller
         $data = $request->validated();
         $deps = $this->validDependencies($project, $data['depends_on'] ?? [], null);
 
+        // Az új fázis egy sablonból hozott csoport alá is beszúrható; enélkül
+        // a fa végére, felső szintre kerül.
+        $parent = ! empty($data['parent_id'])
+            ? $project->phases()->where('is_group', true)->find($data['parent_id'])
+            : null;
+
         $phase = $project->phases()->create([
-            ...collect($data)->except(['depends_on', 'resources'])->all(),
-            'sort_order' => ((int) $project->phases()->max('sort_order')) + 1,
+            ...collect($data)->except(['depends_on', 'resources', 'parent_id'])->all(),
+            'parent_id' => $parent?->id,
+            'level' => $parent ? $parent->level + 1 : 0,
+            'sort_order' => $this->positionFor($project, $parent),
             // Csúszás-elemzéshez (spec §15): a tényleges befejezés dátuma.
             'completed_on' => ((int) ($data['progress'] ?? 0)) === 100 ? today() : null,
         ]);
@@ -29,9 +41,79 @@ class ProjectPhaseController extends Controller
         $phase->dependencies()->sync($deps);
         $this->syncResources($phase, $data['resources'] ?? []);
 
-        $project->logActivity('fazis', "Új fázis: {$phase->name}");
+        $project->logActivity('fazis', $parent
+            ? "Új fázis: {$phase->name} ({$parent->name} alatt)"
+            : "Új fázis: {$phase->name}");
 
         return back()->with('success', 'A fázis hozzáadva.');
+    }
+
+    /**
+     * Ütemterv-sablon betöltése (spec §6): a kész munkastruktúra egy
+     * kattintással bekerül, utána a nem odavaló sorok törölhetők.
+     */
+    public function importTemplate(
+        Request $request,
+        Project $project,
+        PhaseTemplateImporter $importer,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'template' => ['required', 'string', Rule::in(array_keys(PhaseTemplates::all()))],
+            'replace' => ['nullable', 'boolean'],
+        ], [
+            'template.required' => 'Válasszon ütemterv-sablont.',
+            'template.in' => 'Ismeretlen ütemterv-sablon.',
+        ]);
+
+        $template = PhaseTemplates::find($data['template']);
+
+        if ($request->boolean('replace')) {
+            // A gyökér sorok törlése az egész fát viszi (FK cascade).
+            $project->phases()->whereNull('parent_id')->delete();
+        }
+
+        $count = $importer->import($project, $template);
+
+        $project->logActivity('fazis', "Ütemterv-sablon betöltve: {$template['name']} ({$count} sor)");
+
+        return back()->with(
+            'success',
+            "A(z) „{$template['name']}” sablon betöltve — {$count} sor. A nem szükséges sorokat törölje."
+        );
+    }
+
+    /**
+     * Több fázis törlése egyszerre. Egy csoport törlése a teljes ágát viszi,
+     * így a sablon fölösleges részei néhány kattintással megnyeshetők.
+     */
+    public function destroyMany(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+        ], [
+            'ids.required' => 'Nincs kijelölt fázis.',
+        ]);
+
+        $ids = $project->phases()->whereIn('id', $data['ids'])->pluck('id');
+
+        if ($ids->isEmpty()) {
+            return back()->with('info', 'A kijelölt fázisok már nem léteznek.');
+        }
+
+        // A leszármazottak a FK cascade miatt automatikusan törlődnek — a
+        // visszajelzéshez viszont előre kiszámoljuk a teljes darabszámot.
+        $phases = $project->phases()->get(['id', 'parent_id', 'sort_order']);
+        $affected = collect($ids)
+            ->flatMap(fn (int $id) => PhaseTree::subtreeIds($phases, $id))
+            ->unique()
+            ->count();
+
+        $project->phases()->whereIn('id', $ids)->delete();
+
+        $project->logActivity('fazis', "{$affected} fázis törölve az ütemtervből.");
+
+        return back()->with('success', "{$affected} fázis törölve.");
     }
 
     public function update(ProjectPhaseRequest $request, ProjectPhase $phase): RedirectResponse
@@ -41,8 +123,16 @@ class ProjectPhaseController extends Controller
 
         $deps = $this->validDependencies($project, $data['depends_on'] ?? [], $phase);
 
+        $except = ['depends_on', 'resources', 'parent_id'];
+
+        // Összegző sornak nincs saját dátuma és készültsége — azok a gyerekekből
+        // gördülnek fel, tehát csak a megnevezése és a megjegyzése írható.
+        if ($phase->is_group) {
+            $except = [...$except, 'starts_on', 'due_on', 'work_days', 'progress'];
+        }
+
         $wasDone = $phase->progress === 100;
-        $phase->update(collect($data)->except(['depends_on', 'resources'])->all());
+        $phase->update(collect($data)->except($except)->all());
         $phase->dependencies()->sync($deps);
         $this->syncResources($phase, $data['resources'] ?? []);
 
@@ -135,29 +225,71 @@ class ProjectPhaseController extends Controller
     }
 
     /**
-     * Fázis mozgatása felfelé/lefelé a sorrendben.
+     * Fázis mozgatása felfelé/lefelé — a testvérei között, a saját ágával együtt.
+     * A fa szerkezete nem változik, csak két szomszédos ág cserél helyet.
      */
     public function move(Request $request, ProjectPhase $phase): RedirectResponse
     {
         $request->validate(['direction' => ['required', 'in:up,down']]);
 
-        $neighbour = $phase->project->phases()
-            ->when(
-                $request->input('direction') === 'up',
-                fn ($q) => $q->where('sort_order', '<', $phase->sort_order)->orderByDesc('sort_order'),
-                fn ($q) => $q->where('sort_order', '>', $phase->sort_order)->orderBy('sort_order'),
-            )
-            ->first();
+        $project = $phase->project;
+        $phases = $project->phases()->get();
 
-        if ($neighbour) {
-            DB::transaction(function () use ($phase, $neighbour) {
-                [$a, $b] = [$phase->sort_order, $neighbour->sort_order];
-                $phase->update(['sort_order' => $b]);
-                $neighbour->update(['sort_order' => $a]);
-            });
+        $siblings = PhaseTree::siblingsOf($phases, $phase);
+        $index = null;
+        foreach ($siblings as $i => $sibling) {
+            if ($sibling->id === $phase->id) {
+                $index = $i;
+                break;
+            }
         }
 
+        $target = $index + ($request->input('direction') === 'up' ? -1 : 1);
+        if ($index === null || $target < 0 || $target >= count($siblings)) {
+            return back();
+        }
+
+        // A két testvér ága a mélységi sorrendben egymás melletti, összefüggő
+        // blokk — elég a két blokkot megcserélni, a fa többi része nem mozdul.
+        [$firstId, $secondId] = $target < $index
+            ? [$siblings[$target]->id, $phase->id]
+            : [$phase->id, $siblings[$target]->id];
+
+        $ordered = PhaseTree::flatten($phases)->values();
+        $firstSize = count(PhaseTree::subtreeIds($phases, $firstId));
+        $secondSize = count(PhaseTree::subtreeIds($phases, $secondId));
+        $start = (int) $ordered->search(fn (ProjectPhase $p) => $p->id === $firstId);
+
+        PhaseTree::resequence($phases, $ordered
+            ->slice(0, $start)
+            ->concat($ordered->slice($start + $firstSize, $secondSize))
+            ->concat($ordered->slice($start, $firstSize))
+            ->concat($ordered->slice($start + $firstSize + $secondSize))
+            ->values());
+
         return back();
+    }
+
+    /**
+     * Hova kerüljön az új fázis: a fa végére, vagy a választott csoport ágának
+     * a végére (ilyenkor a mögötte lévő sorok eggyel odébb tolódnak).
+     */
+    private function positionFor(Project $project, ?ProjectPhase $parent): int
+    {
+        if ($parent === null) {
+            return ((int) $project->phases()->max('sort_order')) + 1;
+        }
+
+        $ids = PhaseTree::subtreeIds(
+            $project->phases()->get(['id', 'parent_id', 'sort_order']),
+            $parent->id,
+        );
+
+        $position = ((int) ProjectPhase::whereIn('id', $ids)->max('sort_order')) + 1;
+
+        $project->phases()->where('sort_order', '>=', $position)->increment('sort_order');
+
+        return $position;
     }
 
     /**

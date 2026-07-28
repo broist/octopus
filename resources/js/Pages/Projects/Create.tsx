@@ -5,7 +5,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import PageHeader from '@/Components/PageHeader';
 import ProjectForm, { ProjectFormData } from '@/Pages/Projects/Partials/ProjectForm';
 import { usePageProps } from '@/hooks/usePageProps';
-import type { Option } from '@/types/models';
+import type { Option, PhaseTemplateInfo } from '@/types/models';
 
 interface CreateProps extends Record<string, unknown> {
     clients: Option[];
@@ -13,6 +13,8 @@ interface CreateProps extends Record<string, unknown> {
     statuses: Record<string, string>;
     types: Record<string, string>;
     suggestedCode: string;
+    phaseTemplates: PhaseTemplateInfo[];
+    defaultPhaseTemplate: string;
     parent: {
         id: number;
         code: string;
@@ -24,8 +26,16 @@ interface CreateProps extends Record<string, unknown> {
 }
 
 export default function Create() {
-    const { clients, managers, statuses, types, suggestedCode, parent } =
-        usePageProps<CreateProps>();
+    const {
+        clients,
+        managers,
+        statuses,
+        types,
+        suggestedCode,
+        parent,
+        phaseTemplates,
+        defaultPhaseTemplate,
+    } = usePageProps<CreateProps>();
 
     const form = useForm<ProjectFormData>({
         parent_id: parent?.id ?? null,
@@ -40,6 +50,7 @@ export default function Create() {
         starts_on: '',
         ends_on: '',
         description: '',
+        phase_template: defaultPhaseTemplate,
     });
 
     const submit = (e: React.FormEvent) => {
@@ -83,6 +94,7 @@ export default function Create() {
                 types={types}
                 submitLabel={parent ? 'Alprojekt létrehozása' : 'Projekt létrehozása'}
                 cancelUrl={parent ? route('projects.show', parent.id) : route('projects.index')}
+                phaseTemplates={phaseTemplates}
             />
         </>
     );

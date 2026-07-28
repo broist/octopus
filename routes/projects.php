@@ -41,6 +41,13 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/projects/{project}/phases', [ProjectPhaseController::class, 'store'])
         ->middleware('can:projects.edit')->name('projects.phases.store');
 
+    // Ütemterv-sablon betöltése és tömeges törlés (a sablon megnyeséséhez)
+    Route::post('/projects/{project}/phases/template', [ProjectPhaseController::class, 'importTemplate'])
+        ->middleware('can:projects.edit')->name('projects.phases.template');
+
+    Route::delete('/projects/{project}/phases', [ProjectPhaseController::class, 'destroyMany'])
+        ->middleware('can:projects.edit')->name('projects.phases.destroy-many');
+
     Route::put('/project-phases/{phase}', [ProjectPhaseController::class, 'update'])
         ->middleware('can:projects.edit')->name('projects.phases.update');
 

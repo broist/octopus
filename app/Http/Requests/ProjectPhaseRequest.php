@@ -17,7 +17,9 @@ class ProjectPhaseRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:120'],
+            'name' => ['required', 'string', 'max:200'],
+            // Melyik összegző sor (csoport) alá kerüljön — csak felvitelkor.
+            'parent_id' => ['nullable', 'integer', 'exists:project_phases,id'],
             'starts_on' => ['nullable', 'date'],
             'due_on' => ['nullable', 'date', 'after_or_equal:starts_on'],
             'work_days' => ['nullable', 'integer', 'min:1', 'max:999'],
@@ -44,7 +46,7 @@ class ProjectPhaseRequest extends FormRequest
     {
         return [
             'name.required' => 'A fázis neve kötelező.',
-            'name.max' => 'A fázis neve legfeljebb 120 karakter lehet.',
+            'name.max' => 'A fázis neve legfeljebb 200 karakter lehet.',
             'due_on.after_or_equal' => 'A határidő nem lehet korábbi a kezdésnél.',
             'progress.required' => 'A készültség megadása kötelező.',
             'progress.min' => 'A készültség 0 és 100 között lehet.',

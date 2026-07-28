@@ -30,9 +30,14 @@ class DashboardController extends Controller
         $today = today();
         $horizon = today()->addDays(14);
 
-        $overdue = fn ($q) => $q->where('progress', '<', 100)
+        // Az összegző (csoport) fázisok kimaradnak: azok a sablonból hozott
+        // munkastruktúra fejlécei, nem önálló munkák.
+        $overdue = fn ($q) => $q->where('is_group', false)
+            ->where('progress', '<', 100)
             ->whereNotNull('due_on')
             ->whereDate('due_on', '<', $today);
+
+        $work = fn ($q) => $q->where('is_group', false);
 
         // --- Aktív projektek (top 5 + darabszám) ---
         $activeCount = Project::whereNull('parent_id')
@@ -42,9 +47,9 @@ class DashboardController extends Controller
             ->whereNull('parent_id')
             ->whereIn('status', ['szerzodott', 'folyamatban', 'atadas'])
             ->with('client:id,name')
-            ->withCount(['phases', 'subprojectPhases'])
-            ->withAvg('phases as phases_progress', 'progress')
-            ->withAvg('subprojectPhases as sub_phases_progress', 'progress')
+            ->withCount(['phases' => $work, 'subprojectPhases' => $work])
+            ->withAvg(['phases as phases_progress' => $work], 'progress')
+            ->withAvg(['subprojectPhases as sub_phases_progress' => $work], 'progress')
             ->withCount(['phases as overdue_count' => $overdue])
             ->withCount(['subprojectPhases as sub_overdue_count' => $overdue])
             ->orderByDesc('updated_at')
@@ -64,6 +69,7 @@ class DashboardController extends Controller
 
         // --- Közelgő határidők (fázisok + feladatok, 14 nap) ---
         $phaseDeadlines = ProjectPhase::query()
+            ->work()
             ->where('progress', '<', 100)
             ->whereBetween('due_on', [$today->toDateString(), $horizon->toDateString()])
             ->with('project:id,code,name')

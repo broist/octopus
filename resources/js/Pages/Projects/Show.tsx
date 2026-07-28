@@ -23,6 +23,7 @@ import { CATEGORY_LABELS, fileIcon } from '@/lib/documents';
 import type {
     ActivityItem,
     PhaseItem,
+    PhaseTemplateInfo,
     ProjectDetail,
     ProjectDocumentRow,
     SubprojectItem,
@@ -31,6 +32,7 @@ import type {
 interface ShowProps extends Record<string, unknown> {
     project: ProjectDetail;
     phases: PhaseItem[];
+    phaseTemplates: PhaseTemplateInfo[];
     subprojects: SubprojectItem[];
     activities: ActivityItem[];
     documents: ProjectDocumentRow[];
@@ -78,7 +80,7 @@ function ComingSoon({ title, note }: { title: string; note: string }) {
 }
 
 export default function Show() {
-    const { project, phases, subprojects, activities, documents, types, auth } =
+    const { project, phases, phaseTemplates, subprojects, activities, documents, types, auth } =
         usePageProps<ShowProps>();
     const [tab, setTab] = useState<Tab>('attekintes');
 
@@ -318,7 +320,12 @@ export default function Show() {
             {tab === 'utemterv' && (
                 <div className="space-y-4">
                     <Gantt phases={phases} />
-                    <PhasesPanel projectId={project.id} phases={phases} canEdit={canEdit} />
+                    <PhasesPanel
+                        projectId={project.id}
+                        phases={phases}
+                        canEdit={canEdit}
+                        templates={phaseTemplates}
+                    />
                 </div>
             )}
 

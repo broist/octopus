@@ -65,6 +65,7 @@ class SchedulingController extends Controller
 
         // --- Mérföldkövek / határidők a projektekből (csak olvasható réteg) ---
         $milestones = ProjectPhase::query()
+            ->work()
             ->whereNotNull('due_on')
             ->whereBetween('due_on', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
             ->with('project:id,code,name')

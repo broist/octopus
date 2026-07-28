@@ -1,11 +1,14 @@
 import { useMemo } from 'react';
+import { phaseRef } from '@/lib/phases';
 import type { PhaseItem } from '@/types/models';
 
 const MS_PER_DAY = 86_400_000;
-const LABEL_W = 190;
+const LABEL_W = 230;
 const ROW_H = 36;
 const HEADER_H = 34;
 const BAR_H = 18;
+/** Behúzás szintenként a névoszlopban (a munkastruktúra mélysége). */
+const INDENT = 9;
 
 const monthFmt = new Intl.DateTimeFormat('hu-HU', { month: 'short' });
 
@@ -163,11 +166,14 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                     );
                 })}
 
-                {/* Sorok elválasztói + nevek */}
+                {/* Sorok elválasztói + nevek (a munkastruktúra szerint behúzva) */}
                 {rows.map((r, i) => {
                     const y = HEADER_H + i * ROW_H;
-                    const label = `${r.phase.seq}. ${r.phase.name}`;
-                    const name = label.length > 26 ? `${label.slice(0, 25)}…` : label;
+                    const indent = 6 + r.phase.level * INDENT;
+                    const label = `${phaseRef(r.phase)} ${r.phase.name}`;
+                    const room = Math.max(6, Math.floor((LABEL_W - indent - 6) / 6.2));
+                    const name = label.length > room ? `${label.slice(0, room - 1)}…` : label;
+
                     return (
                         <g key={r.phase.id}>
                             <line
@@ -179,12 +185,13 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                                 strokeWidth={i === 0 ? 1 : 0.5}
                             />
                             <text
-                                x={6}
+                                x={indent}
                                 y={rowCenterY(i) + 4}
                                 fontSize={12}
-                                fontWeight={500}
-                                fill={r.overdue ? '#C0503A' : '#2b2b28'}
+                                fontWeight={r.phase.is_group ? 600 : 500}
+                                fill={r.overdue ? '#C0503A' : r.phase.is_group ? '#21382E' : '#2b2b28'}
                             >
+                                <title>{label}</title>
                                 {name}
                             </text>
                         </g>
@@ -217,16 +224,34 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                     }),
                 )}
 
-                {/* Fázis-sávok */}
+                {/* Fázis-sávok — az összegző sorok az MS Project-féle vékony
+                    „kapocs” alakot kapják, a munkasorok tömör sávot. */}
                 {rows.map((r, i) => {
                     const xs = x(r.start);
                     const xe = x(new Date(r.end.getTime() + MS_PER_DAY));
                     const w = Math.max(xe - xs, 6);
-                    const y = rowCenterY(i) - BAR_H / 2;
-                    const track = r.overdue
-                        ? 'rgba(192,80,58,0.22)'
-                        : 'rgba(46,107,79,0.20)';
                     const fill = r.overdue ? '#C0503A' : '#2E6B4F';
+
+                    if (r.phase.is_group) {
+                        const gy = rowCenterY(i) - 5;
+                        const colour = r.overdue ? '#C0503A' : '#21382E';
+
+                        return (
+                            <g key={r.phase.id}>
+                                <path
+                                    d={`M ${xs} ${gy} H ${xs + w} V ${gy + 5} L ${xs + w - 4} ${gy + 1}
+                                        H ${xs + 4} L ${xs} ${gy + 5} Z`}
+                                    fill={colour}
+                                />
+                                <text x={xe + 6} y={gy + 8} fontSize={10.5} fill={colour}>
+                                    {r.phase.progress}%
+                                </text>
+                            </g>
+                        );
+                    }
+
+                    const y = rowCenterY(i) - BAR_H / 2;
+                    const track = r.overdue ? 'rgba(192,80,58,0.22)' : 'rgba(46,107,79,0.20)';
 
                     return (
                         <g key={r.phase.id}>
@@ -295,6 +320,9 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                 </span>
                 <span className="flex items-center gap-1.5">
                     <span className="h-2.5 w-5 rounded-sm bg-coral/20" /> Ütközés / párhuzam
+                </span>
+                <span className="flex items-center gap-1.5">
+                    <span className="h-1 w-5 rounded-sm bg-sidebar" /> Összegző sor
                 </span>
             </div>
         </div>
