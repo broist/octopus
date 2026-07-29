@@ -238,6 +238,21 @@ export default function UploadDialog({
                                 </p>
                             )}
 
+                            {/* Sok fájl mappa-információ nélkül: a szerkezet nem őrizhető meg,
+                                mert a böngésző nem árulta el, honnan jöttek. */}
+                            {! notice && folders === 0 && entries.length > 3 && (
+                                <p className="mt-2 flex items-start gap-2 rounded-md border border-line bg-cream/60 px-3 py-2 text-xs text-ink-soft">
+                                    <FolderTree size={14} className="mt-0.5 shrink-0" />
+                                    <span>
+                                        Ezek a fájlok mappaszerkezet nélkül érkeztek, ezért mind
+                                        ebbe a mappába kerülnek. Ha a mappákat is meg szeretné
+                                        tartani, zárja be ezt az ablakot, és a{' '}
+                                        <strong>„Feltöltés ▾ → Mappa feltöltése (almappákkal)…”</strong>{' '}
+                                        gombbal a befoglaló mappát válassza ki.
+                                    </span>
+                                </p>
+                            )}
+
                             {oversized.length > 0 && (
                                 <p className="mt-2 flex items-start gap-2 rounded-md border border-amberwarn/30 bg-amberwarn/10 px-3 py-2 text-xs text-[#8a5e17]">
                                     <AlertTriangle size={14} className="mt-0.5 shrink-0" />
