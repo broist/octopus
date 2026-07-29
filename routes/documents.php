@@ -4,6 +4,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\DocumentVersionController;
 use App\Http\Controllers\FileOpsController;
 use App\Http\Controllers\FolderController;
+use App\Http\Controllers\OfficeController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,6 +36,11 @@ Route::middleware(['auth', 'can:documents.view'])->group(function () {
 
     // Fájl áthelyezése
     Route::put('/documents/{document}/move', [DocumentController::class, 'move'])->name('documents.move');
+
+    // Megnyitás asztali Office-ban: megnyitó hivatkozás (a szerkesztés maga a
+    // /office WebDAV-végponton megy, munkameneten kívül).
+    Route::post('/documents/{document}/office', [OfficeController::class, 'link'])
+        ->name('documents.office');
 
     Route::get('/documents/{document}', [DocumentController::class, 'show'])
         ->name('documents.show');

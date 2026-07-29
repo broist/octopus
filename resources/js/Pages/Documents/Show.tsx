@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
+    AppWindow,
     ArrowLeft,
     Cloud,
     Download,
@@ -17,6 +18,7 @@ import InputError from '@/Components/ui/InputError';
 import { usePageProps } from '@/hooks/usePageProps';
 import { fmtBytes, fmtDateTime } from '@/lib/format';
 import { CATEGORY_LABELS } from '@/lib/documents';
+import { officeAppFor, openInAppLabel } from '@/Pages/Documents/Partials/office';
 import type { DocumentVersionRow, Option, ProjectOption } from '@/types/models';
 
 interface ShowProps extends Record<string, unknown> {
@@ -70,6 +72,34 @@ export default function Show() {
     });
 
     const current = versions.find((v) => v.is_current);
+
+    /* -------- megnyitás asztali Office-ban -------- */
+    const officeApp = officeAppFor(current?.original_filename);
+    const [opening, setOpening] = useState(false);
+
+    const openInOffice = async () => {
+        setOpening(true);
+        try {
+            const { data } = await window.axios.post(route('documents.office', doc.id));
+
+            if (! data.secure) {
+                window.alert(
+                    'Az Office csak biztonságos (https) címről nyitja meg és menti a fájlt — '
+                        + 'használja az éles címet.',
+                );
+
+                return;
+            }
+
+            window.location.href = data.uri as string;
+        } catch (err) {
+            const message = (err as { response?: { data?: { message?: string } } }).response?.data
+                ?.message;
+            window.alert(message ?? 'A megnyitó hivatkozást nem sikerült elkészíteni.');
+        } finally {
+            setOpening(false);
+        }
+    };
 
     const saveMeta = (e: React.FormEvent) => {
         e.preventDefault();
@@ -143,6 +173,12 @@ export default function Show() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
+                        {officeApp && (
+                            <button className="btn-ghost" onClick={openInOffice} disabled={opening}>
+                                <AppWindow size={15} />
+                                {openInAppLabel(officeApp)}
+                            </button>
+                        )}
                         {current && (
                             <a
                                 href={route('documents.versions.download', current.id)}

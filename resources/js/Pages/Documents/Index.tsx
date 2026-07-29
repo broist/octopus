@@ -1,6 +1,7 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import {
+    AppWindow,
     ArrowUpDown,
     Camera,
     CheckCheck,
@@ -41,6 +42,7 @@ import PropertiesDialog from '@/Pages/Documents/Partials/PropertiesDialog';
 import TemplateDialog, { type FolderTemplate } from '@/Pages/Documents/Partials/TemplateDialog';
 import UploadDialog from '@/Pages/Documents/Partials/UploadDialog';
 import { AddressBar, CommandBar } from '@/Pages/Documents/Partials/ExplorerBars';
+import { officeAppFor, openInAppLabel } from '@/Pages/Documents/Partials/office';
 import {
     type UploadEntry,
     MAX_ENTRIES,
@@ -209,6 +211,7 @@ export default function Index() {
         items: { type: 'folder' | 'file'; id: number }[];
         recursive: boolean;
     } | null>(null);
+    const [info, setInfo] = useState<{ title: string; message: ReactNode } | null>(null);
     const [menu, setMenu] = useState<{
         x: number;
         y: number;
@@ -493,6 +496,47 @@ export default function Index() {
 
     const refresh = () => router.reload();
 
+    /**
+     * Megnyitás asztali Office-ban: kérünk egy rövid életű megnyitó
+     * hivatkozást, azt pedig átadjuk a rendszernek — a Windows innen indítja a
+     * telepített Wordöt/Excelt, és mentéskor az új verzió ide jön vissza.
+     */
+    const openInOffice = async (documentId: number) => {
+        try {
+            const { data } = await window.axios.post(route('documents.office', documentId));
+
+            if (! data.secure) {
+                setInfo({
+                    title: 'Csak HTTPS-en működik',
+                    message:
+                        'Az Office csak biztonságos (https) címről nyitja meg és menti a fájlt. '
+                        + 'Használja az éles címet (cloud.acuwall.hu).',
+                });
+
+                return;
+            }
+
+            window.location.href = data.uri as string;
+
+            setInfo({
+                title: `${data.app} indítása`,
+                message: data.editable
+                    ? `A(z) „${data.filename}” megnyílik a(z) ${data.app} programban. `
+                        + 'Ha ott menti, a fájl ÚJ VERZIÓKÉNT kerül vissza ide — az oldalt frissítve látja.'
+                    : `A(z) „${data.filename}” csak megtekintésre nyílik meg: ebbe a mappába nincs `
+                        + 'szerkesztési jogosultsága.',
+            });
+        } catch (err) {
+            const message = (err as { response?: { data?: { message?: string } } }).response?.data
+                ?.message;
+
+            setInfo({
+                title: 'A megnyitás nem sikerült',
+                message: message ?? 'A megnyitó hivatkozást nem sikerült elkészíteni.',
+            });
+        }
+    };
+
     /* ---------------- helyi menük ---------------- */
     const openMenuAt = (
         x: number,
@@ -630,6 +674,18 @@ export default function Index() {
                 disabled: many,
                 onClick: () => openItem(item),
             },
+            ...(!isFolder && officeAppFor((item.row as ExplorerFileRow).original_filename)
+                ? ([
+                      {
+                          label: openInAppLabel(
+                              officeAppFor((item.row as ExplorerFileRow).original_filename) ?? '',
+                          ),
+                          icon: AppWindow,
+                          disabled: many,
+                          onClick: () => openInOffice(item.row.id),
+                      },
+                  ] as MenuEntry[])
+                : []),
             ...(!isFolder
                 ? ([
                       {
@@ -1493,6 +1549,17 @@ export default function Index() {
                     );
                 }}
                 onClose={() => setConfirm(null)}
+            />
+
+            <ConfirmDialog
+                open={info !== null}
+                title={info?.title ?? ''}
+                message={info?.message}
+                confirmLabel="Rendben"
+                danger={false}
+                cancelLabel={null}
+                onConfirm={() => setInfo(null)}
+                onClose={() => setInfo(null)}
             />
 
             <UploadDialog

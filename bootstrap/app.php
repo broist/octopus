@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // naptár-kliense nem kezel munkamenetet és CSRF-tokent, a
             // hitelesítés naptár-jelszóval (basic auth) történik.
             Route::group([], __DIR__.'/../routes/caldav.php');
+
+            // Ugyanez az Office WebDAV-végpontjára: ott az URL-ben lévő jegy
+            // hitelesít (az Office sem küld munkamenet-sütit).
+            Route::group([], __DIR__.'/../routes/webdav.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware) {

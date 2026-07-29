@@ -8,6 +8,8 @@ interface ConfirmDialogProps {
     title: string;
     message: ReactNode;
     confirmLabel?: string;
+    /** null = nincs másodlagos gomb (tájékoztató párbeszédnél). */
+    cancelLabel?: string | null;
     danger?: boolean;
     busy?: boolean;
     onConfirm: () => void;
@@ -22,6 +24,7 @@ export default function ConfirmDialog({
     title,
     message,
     confirmLabel = 'Igen',
+    cancelLabel = 'Mégse',
     danger = true,
     busy = false,
     onConfirm,
@@ -57,9 +60,11 @@ export default function ConfirmDialog({
                         >
                             {confirmLabel}
                         </button>
-                        <button className="btn-ghost !py-1.5 text-[13px]" onClick={onClose}>
-                            Mégse
-                        </button>
+                        {cancelLabel !== null && (
+                            <button className="btn-ghost !py-1.5 text-[13px]" onClick={onClose}>
+                                {cancelLabel}
+                            </button>
+                        )}
                     </div>
                 </DialogPanel>
             </div>
