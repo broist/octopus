@@ -43,6 +43,9 @@ import UploadDialog from '@/Pages/Documents/Partials/UploadDialog';
 import { AddressBar, CommandBar } from '@/Pages/Documents/Partials/ExplorerBars';
 import {
     type UploadEntry,
+    MAX_ENTRIES,
+    canPickDirectory,
+    entriesFromDirectoryPicker,
     entriesFromDrop,
     entriesFromFiles,
     looksLikeFolder,
@@ -263,10 +266,47 @@ export default function Index() {
                 + 'fájlok mind feltöltődnek, a szerkezetükkel együtt.'
             : undefined;
 
+        // Néma csonkítás helyett szóljunk, ha elértük a felső korlátot.
+        const capNotice = entries.length >= MAX_ENTRIES
+            ? `Egyszerre legfeljebb ${MAX_ENTRIES} fájl kezelhető, a lista ennél le van vágva — `
+                + 'a maradékot külön körben töltse fel.'
+            : undefined;
+
+        const notice = [folderNotice, capNotice].filter(Boolean).join(' ') || undefined;
+
         setUpload({
             entries: usable,
             folderId: targetId,
-            notice: usable.length > 0 ? folderNotice : (folderNotice ?? emptyNotice),
+            notice: usable.length > 0 ? notice : (notice ?? emptyNotice),
+        });
+    };
+
+    /**
+     * Mappa feltöltése. Elsődlegesen a natív mappaválasztót használjuk (az adja
+     * biztosan a szerkezetet), és csak ha az nincs, esünk vissza a rejtett
+     * `webkitdirectory` bemenetre.
+     */
+    const pickFolder = () => {
+        if (! canPickDirectory()) {
+            folderInput.current?.click();
+
+            return;
+        }
+
+        void entriesFromDirectoryPicker().then((result) => {
+            if (result.status === 'cancelled') return;
+
+            if (result.status === 'unavailable') {
+                folderInput.current?.click();
+
+                return;
+            }
+
+            acceptEntries(
+                result.entries,
+                folderId,
+                'A kiválasztott mappában nem található feltölthető fájl.',
+            );
         });
     };
 
@@ -509,7 +549,7 @@ export default function Index() {
             label: 'Mappa feltöltése (almappákkal)…',
             icon: FolderUp,
             disabled: !can.create,
-            onClick: () => folderInput.current?.click(),
+            onClick: pickFolder,
         },
         ...(coarse
             ? ([

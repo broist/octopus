@@ -129,6 +129,44 @@ async function walkHandle(handle: HandleLike, prefix: string, out: UploadEntry[]
     }
 }
 
+/** Elérhető-e a natív mappaválasztó (File System Access API)? */
+export const canPickDirectory = (): boolean =>
+    typeof (window as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function';
+
+export type DirectoryPick =
+    | { status: 'ok'; entries: UploadEntry[] }
+    | { status: 'cancelled' }
+    | { status: 'unavailable' };
+
+/**
+ * Mappa választása a natív mappaválasztóval, a teljes tartalom bejárásával.
+ *
+ * Ez megbízhatóbb a `webkitdirectory` bemenetnél: ott a böngésző a relatív
+ * útvonalat (`webkitRelativePath`) néha üresen adja vissza, és akkor a
+ * mappaszerkezet menthetetlenül elveszik.
+ */
+export async function entriesFromDirectoryPicker(): Promise<DirectoryPick> {
+    const picker = (window as { showDirectoryPicker?: () => Promise<HandleLike> })
+        .showDirectoryPicker;
+
+    if (typeof picker !== 'function') return { status: 'unavailable' };
+
+    let handle: HandleLike;
+    try {
+        handle = await picker.call(window);
+    } catch (err) {
+        // Megszakítás = AbortError; minden más hibánál maradjon a régi út.
+        return (err as DOMException)?.name === 'AbortError'
+            ? { status: 'cancelled' }
+            : { status: 'unavailable' };
+    }
+
+    const out: UploadEntry[] = [];
+    await walkHandle(handle, '', out);
+
+    return { status: 'ok', entries: out };
+}
+
 /**
  * Ejtett elemek begyűjtése. A mappákat előbb a régebbi webkitGetAsEntry, majd
  * — ha az nem hozott semmit — az újabb File System Access API-val járjuk be;
