@@ -26,6 +26,21 @@ class QuotePdf
     private const PANEL = '#F4F7FA';
 
     /**
+     * Rögzített oszlopszélességek. Az mPDF-nek a táblázat MINDEN cellájára ki kell
+     * írni a width-et, különben a tartalom hossza alapján méretezi az oszlopokat,
+     * és munkanemenként más helyre esnek ugyanazok az oszlopok.
+     */
+    private const COLS_QTY = ['56%', '12%', '10%', '22%'];   // tartalom | menny. | egység | összeg
+    private const COLS_PLAIN = ['74%', '26%'];               // tartalom | összeg
+    private const COLS_PAY = ['38%', '12%', '22%', '28%'];   // mérföldkő | arány | összeg | esedékesség
+
+    /** Cellanyitó tag a rögzített szélességgel: <td width="22%" class="r num"> */
+    private static function cell(string $tag, string $width, string $class = ''): string
+    {
+        return '<'.$tag.' width="'.$width.'"'.($class !== '' ? ' class="'.$class.'"' : '').'>';
+    }
+
+    /**
      * @param  array<string, mixed>  $quote  A nyers ajánlat (data JSON dekódolva)
      * @return string  A PDF bináris tartalma
      */
@@ -139,14 +154,15 @@ class QuotePdf
             table.meta td { padding: 5px 7px; font-size: 8.6pt; vertical-align: top;
                             border: 0.4px solid {$line}; }
             td.lbl { color: {$muted}; font-size: 7.6pt; width: 22%; }
-            table.grid { width: 100%; border-collapse: collapse; margin-top: 2px;
-                         table-layout: fixed; overflow-wrap: break-word; word-wrap: break-word; }
+            /* Az mPDF nem ismeri a table-layout / colgroup szabályokat: az oszlopok
+               szélességét kizárólag a cellákra írt width adja (lásd COL_* konstansok). */
+            table.grid { width: 100%; border-collapse: collapse; margin-top: 2px; }
             table.grid th { background: {$orange}; color: #FFFFFF; font-size: 8pt;
                             padding: 5px 6px; text-align: left; }
             table.grid th.r, table.grid td.r { text-align: right; }
             table.grid th.c, table.grid td.c { text-align: center; }
             table.grid td { border: 0.4px solid {$line}; padding: 4px 6px; font-size: 8.2pt;
-                            vertical-align: top; overflow-wrap: break-word; word-wrap: break-word; }
+                            vertical-align: top; }
             table.grid td.num { white-space: nowrap; }
             tr.sum td { background: {$panel}; font-weight: bold; }
             table.totals { width: 74%; border-collapse: collapse; margin-left: 26%; margin-top: 8px; }
@@ -207,16 +223,19 @@ class QuotePdf
         // Fizetési ütemezés
         if (! empty($quote['payments'])) {
             $html .= '<h2 class="section">FIZETÉSI ÜTEMEZÉS</h2>';
-            $html .= '<table class="grid">'
-                .'<colgroup><col style="width:38%" /><col style="width:12%" /><col style="width:22%" /><col style="width:28%" /></colgroup>'
-                .'<tr><th>Mérföldkő</th><th class="r">Arány</th><th class="r">Nettó összeg</th><th>Esedékesség</th></tr>';
+            [$wName, $wPct, $wAmount, $wDue] = self::COLS_PAY;
+            $html .= '<table class="grid"><tr>'
+                .self::cell('th', $wName).'Mérföldkő</th>'
+                .self::cell('th', $wPct, 'r').'Arány</th>'
+                .self::cell('th', $wAmount, 'r').'Nettó összeg</th>'
+                .self::cell('th', $wDue).'Esedékesség</th></tr>';
             foreach ($quote['payments'] as $pay) {
                 $percent = (float) ($pay['percent'] ?? 0);
                 $amount = $totals['netOffer'] * $percent / 100;
-                $html .= '<tr><td>'.self::esc($pay['name'] ?? '').'</td>'
-                    .'<td class="r num">'.number_format($percent, 1, ',', ' ').'%</td>'
-                    .'<td class="r num">'.$huf($amount).'</td>'
-                    .'<td>'.self::esc($pay['condition'] ?? '').'</td></tr>';
+                $html .= '<tr>'.self::cell('td', $wName).self::esc($pay['name'] ?? '').'</td>'
+                    .self::cell('td', $wPct, 'r num').number_format($percent, 1, ',', ' ').'%</td>'
+                    .self::cell('td', $wAmount, 'r num').$huf($amount).'</td>'
+                    .self::cell('td', $wDue).self::esc($pay['condition'] ?? '').'</td></tr>';
             }
             $html .= '</table>';
         }
@@ -251,9 +270,10 @@ class QuotePdf
 
     private static function summaryContent(array $quote, callable $huf): string
     {
-        $html = '<table class="grid">'
-            .'<colgroup><col style="width:74%" /><col style="width:26%" /></colgroup>'
-            .'<tr><th>Munkanem</th><th class="r">Nettó összeg</th></tr>';
+        [$wDesc, $wAmount] = self::COLS_PLAIN;
+        $html = '<table class="grid"><tr>'
+            .self::cell('th', $wDesc).'Munkanem</th>'
+            .self::cell('th', $wAmount, 'r').'Nettó összeg</th></tr>';
         foreach ($quote['categories'] ?? [] as $category) {
             if (! ($category['active'] ?? true)) {
                 continue;
@@ -267,8 +287,8 @@ class QuotePdf
                 }
             }
             if ($hasActive) {
-                $html .= '<tr><td>'.self::esc($category['title'] ?? '').'</td>'
-                    .'<td class="r num">'.$huf($offer).'</td></tr>';
+                $html .= '<tr>'.self::cell('td', $wDesc).self::esc($category['title'] ?? '').'</td>'
+                    .self::cell('td', $wAmount, 'r num').$huf($offer).'</td></tr>';
             }
         }
         $html .= '</table>';
@@ -279,6 +299,8 @@ class QuotePdf
     private static function detailedContent(array $quote, callable $huf, bool $showQty): string
     {
         $html = '';
+        [$wDesc, $wQty, $wUnit, $wAmount] = self::COLS_QTY;
+        [$wDescPlain, $wAmountPlain] = self::COLS_PLAIN;
         foreach ($quote['categories'] ?? [] as $category) {
             if (! ($category['active'] ?? true)) {
                 continue;
@@ -293,13 +315,13 @@ class QuotePdf
                 $catOffer += $calc['offer'];
                 if ($showQty) {
                     $qty = rtrim(rtrim(number_format($calc['quantity'], 2, ',', ' '), '0'), ',');
-                    $rows .= '<tr><td>'.self::esc($item['description'] ?? '').'</td>'
-                        .'<td class="r num">'.$qty.'</td>'
-                        .'<td class="c">'.self::esc($item['unit'] ?? '').'</td>'
-                        .'<td class="r num">'.$huf($calc['offer']).'</td></tr>';
+                    $rows .= '<tr>'.self::cell('td', $wDesc).self::esc($item['description'] ?? '').'</td>'
+                        .self::cell('td', $wQty, 'r num').$qty.'</td>'
+                        .self::cell('td', $wUnit, 'c').self::esc($item['unit'] ?? '').'</td>'
+                        .self::cell('td', $wAmount, 'r num').$huf($calc['offer']).'</td></tr>';
                 } else {
-                    $rows .= '<tr><td>'.self::esc($item['description'] ?? '').'</td>'
-                        .'<td class="r num">'.$huf($calc['offer']).'</td></tr>';
+                    $rows .= '<tr>'.self::cell('td', $wDescPlain).self::esc($item['description'] ?? '').'</td>'
+                        .self::cell('td', $wAmountPlain, 'r num').$huf($calc['offer']).'</td></tr>';
                 }
             }
             if ($rows === '') {
@@ -307,16 +329,19 @@ class QuotePdf
             }
             $html .= '<h3 class="cat">'.self::esc($category['title'] ?? '').'</h3>';
             if ($showQty) {
-                $html .= '<table class="grid">'
-                    .'<colgroup><col style="width:58%" /><col style="width:11%" /><col style="width:9%" /><col style="width:22%" /></colgroup>'
-                    .'<tr><th>Műszaki tartalom</th><th class="r">Menny.</th>'
-                    .'<th class="c">Egység</th><th class="r">Nettó összeg</th></tr>'.$rows
-                    .'<tr class="sum"><td colspan="3">Munkanem összesen</td><td class="r num">'.$huf($catOffer).'</td></tr></table>';
+                $html .= '<table class="grid"><tr>'
+                    .self::cell('th', $wDesc).'Műszaki tartalom</th>'
+                    .self::cell('th', $wQty, 'r').'Menny.</th>'
+                    .self::cell('th', $wUnit, 'c').'Egység</th>'
+                    .self::cell('th', $wAmount, 'r').'Nettó összeg</th></tr>'.$rows
+                    .'<tr class="sum"><td colspan="3">Munkanem összesen</td>'
+                    .self::cell('td', $wAmount, 'r num').$huf($catOffer).'</td></tr></table>';
             } else {
-                $html .= '<table class="grid">'
-                    .'<colgroup><col style="width:74%" /><col style="width:26%" /></colgroup>'
-                    .'<tr><th>Műszaki tartalom</th><th class="r">Nettó összeg</th></tr>'.$rows
-                    .'<tr class="sum"><td>Munkanem összesen</td><td class="r num">'.$huf($catOffer).'</td></tr></table>';
+                $html .= '<table class="grid"><tr>'
+                    .self::cell('th', $wDescPlain).'Műszaki tartalom</th>'
+                    .self::cell('th', $wAmountPlain, 'r').'Nettó összeg</th></tr>'.$rows
+                    .'<tr class="sum">'.self::cell('td', $wDescPlain).'Munkanem összesen</td>'
+                    .self::cell('td', $wAmountPlain, 'r num').$huf($catOffer).'</td></tr></table>';
             }
         }
 

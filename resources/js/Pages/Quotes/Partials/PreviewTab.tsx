@@ -146,26 +146,38 @@ export default function PreviewTab({ quoteId, data, totals, folders, setField }:
                                 return (
                                     <div key={cat.id}>
                                         <h3 className="mb-1 text-sm font-semibold text-sidebar">{cat.title}</h3>
-                                        <table className="w-full border-collapse text-sm">
+                                        {/* Fix oszlopszélesség: a munkanemek táblái egymás alatt
+                                            ugyanott futnak, ahogy a PDF-ben is (QuotePdf::COLS_*). */}
+                                        <table className="w-full table-fixed border-collapse text-sm">
+                                            <colgroup>
+                                                <col style={{ width: showQty ? '56%' : '74%' }} />
+                                                {showQty && <col style={{ width: '12%' }} />}
+                                                {showQty && <col style={{ width: '10%' }} />}
+                                                <col style={{ width: showQty ? '22%' : '26%' }} />
+                                            </colgroup>
                                             <thead>
                                                 <tr className="bg-[#F04A24] text-left text-xs text-white">
                                                     <th className="px-3 py-1.5">Műszaki tartalom</th>
                                                     {showQty && <th className="px-3 py-1.5 text-right">Menny.</th>}
-                                                    {showQty && <th className="px-3 py-1.5">Egység</th>}
+                                                    {showQty && <th className="px-3 py-1.5 text-center">Egység</th>}
                                                     <th className="px-3 py-1.5 text-right">Nettó összeg</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {rows.map(({ item, offer, qty }) => (
                                                     <tr key={item.id} className="border-b border-line">
-                                                        <td className="px-3 py-1.5">{item.description}</td>
+                                                        <td className="break-words px-3 py-1.5">
+                                                            {item.description}
+                                                        </td>
                                                         {showQty && (
-                                                            <td className="px-3 py-1.5 text-right tabular-nums">
+                                                            <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                                                                 {qty.toLocaleString('hu-HU')}
                                                             </td>
                                                         )}
-                                                        {showQty && <td className="px-3 py-1.5">{item.unit}</td>}
-                                                        <td className="px-3 py-1.5 text-right tabular-nums">
+                                                        {showQty && (
+                                                            <td className="px-3 py-1.5 text-center">{item.unit}</td>
+                                                        )}
+                                                        <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                                                             {fmtHuf(offer)}
                                                         </td>
                                                     </tr>
@@ -174,7 +186,7 @@ export default function PreviewTab({ quoteId, data, totals, folders, setField }:
                                                     <td className="px-3 py-1.5" colSpan={showQty ? 3 : 1}>
                                                         Munkanem összesen
                                                     </td>
-                                                    <td className="px-3 py-1.5 text-right tabular-nums">
+                                                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                                                         {fmtHuf(catOffer)}
                                                     </td>
                                                 </tr>
@@ -185,7 +197,11 @@ export default function PreviewTab({ quoteId, data, totals, folders, setField }:
                             })}
                         </div>
                     ) : (
-                        <table className="w-full border-collapse text-sm">
+                        <table className="w-full table-fixed border-collapse text-sm">
+                            <colgroup>
+                                <col style={{ width: '74%' }} />
+                                <col style={{ width: '26%' }} />
+                            </colgroup>
                             <thead>
                                 <tr className="bg-[#F04A24] text-left text-xs text-white">
                                     <th className="px-3 py-2">Munkanem</th>
