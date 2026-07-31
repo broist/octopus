@@ -199,6 +199,19 @@ export interface TaskItem {
     can_move: boolean;
     completed_at: string | null;
     attachments: TaskAttachment[];
+    comments_count: number;
+}
+
+/** Egy bejegyzés a feladat idővonalán: hozzászólás vagy státuszváltás. */
+export interface TaskTimelineEntry {
+    id: number;
+    kind: 'comment' | 'status';
+    body: string | null;
+    from_status: TaskStatus | null;
+    to_status: TaskStatus | null;
+    user: Option | null;
+    created_at: string;
+    can_delete: boolean;
 }
 
 export interface ProjectOption {

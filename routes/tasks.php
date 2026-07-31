@@ -27,6 +27,17 @@ Route::middleware(['auth'])->group(function () {
     Route::delete('/tasks/{task}', [TaskController::class, 'destroy'])
         ->middleware('can:tasks.delete')->name('tasks.destroy');
 
+    // Idővonal: hozzászólni a feladatot látó bármelyik felhasználó tud, a
+    // törlést a controller korlátozza a saját bejegyzésre (vagy tasks.delete).
+    Route::get('/tasks/{task}/timeline', [TaskController::class, 'timeline'])
+        ->middleware('can:tasks.view')->name('tasks.timeline');
+
+    Route::post('/tasks/{task}/comments', [TaskController::class, 'storeComment'])
+        ->middleware('can:tasks.view')->name('tasks.comments.store');
+
+    Route::delete('/task-comments/{comment}', [TaskController::class, 'destroyComment'])
+        ->middleware('can:tasks.view')->name('tasks.comments.destroy');
+
     // Feladat-csatolmány letöltése.
     Route::get('/task-attachments/{attachment}', [TaskController::class, 'downloadAttachment'])
         ->middleware('can:tasks.view')->name('tasks.attachments.download');

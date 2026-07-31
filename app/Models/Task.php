@@ -63,6 +63,30 @@ class Task extends Model
         return $this->hasMany(TaskAttachment::class)->latest();
     }
 
+    /** Idővonal: hozzászólások és státuszváltások időrendben (legrégebbi elöl). */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(TaskComment::class)->oldest('id');
+    }
+
+    /**
+     * Státuszváltás rögzítése az idővonalon. Csak tényleges váltásnál ír be
+     * sort, hogy a mentés gomb ismételt megnyomása ne szemetelje tele.
+     */
+    public function logStatusChange(?string $from, string $to, ?User $user): void
+    {
+        if ($from === $to) {
+            return;
+        }
+
+        $this->comments()->create([
+            'user_id' => $user?->id,
+            'kind' => TaskComment::KIND_STATUS,
+            'from_status' => $from,
+            'to_status' => $to,
+        ]);
+    }
+
     public function isOverdue(): bool
     {
         return $this->status !== 'kesz'

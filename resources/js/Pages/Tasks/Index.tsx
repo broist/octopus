@@ -2,11 +2,13 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import {
+    Archive,
     CalendarClock,
     Columns3,
     ImageIcon,
     List,
     ListChecks,
+    MessageSquare,
     Paperclip,
     Plus,
     Search,
@@ -16,6 +18,7 @@ import {
 import clsx from 'clsx';
 import AppLayout from '@/Layouts/AppLayout';
 import PageHeader from '@/Components/PageHeader';
+import TaskTimeline from './Partials/TaskTimeline';
 import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
@@ -32,6 +35,9 @@ import type {
 
 type TaskScope = '' | 'project' | 'internal';
 
+/** Aktuális (nyitott + frissen lezárt) | Archívum (kész) | Összes. */
+type TaskState = 'active' | 'done' | 'all';
+
 interface IndexProps extends Record<string, unknown> {
     tasks: TaskItem[];
     filters: {
@@ -42,8 +48,13 @@ interface IndexProps extends Record<string, unknown> {
         assignee: number | null;
         scope: TaskScope;
         mine: boolean;
+        state: TaskState;
+        done_from: string;
+        done_to: string;
     };
     scopeCounts: { all: number; project: number; internal: number };
+    stateCounts: { active: number; done: number; all: number };
+    recentDoneDays: number;
     statuses: Record<string, string>;
     priorities: Record<string, string>;
     users: Option[];
@@ -62,7 +73,14 @@ const PRIORITY_CHIP: Record<TaskPriority, string> = {
 
 const STATUS_ORDER: TaskStatus[] = ['teendo', 'folyamatban', 'kesz'];
 
-type SortKey = 'due_asc' | 'due_desc' | 'name' | 'assignee' | 'project' | 'created_desc';
+type SortKey =
+    | 'due_asc'
+    | 'due_desc'
+    | 'name'
+    | 'assignee'
+    | 'project'
+    | 'created_desc'
+    | 'completed_desc';
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
     { value: 'due_asc', label: 'Határidő ↑ (legközelebbi elöl)' },
@@ -71,6 +89,7 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
     { value: 'assignee', label: 'Felelős szerint' },
     { value: 'project', label: 'Projekt szerint' },
     { value: 'created_desc', label: 'Legújabban létrehozott' },
+    { value: 'completed_desc', label: 'Legutóbb lezárt' },
 ];
 
 function initials(name: string): string {
@@ -182,7 +201,7 @@ function TaskModal({
         <Dialog open onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
             <div className="fixed inset-0 flex items-center justify-center overflow-y-auto p-4">
-                <DialogPanel className="o-card my-8 w-full max-w-lg p-6">
+                <DialogPanel className={clsx('o-card my-8 w-full p-6', task ? 'max-w-2xl' : 'max-w-lg')}>
                     <DialogTitle className="text-lg font-semibold text-sidebar">
                         {task ? 'Feladat szerkesztése' : 'Új feladat'}
                     </DialogTitle>
@@ -412,6 +431,13 @@ function TaskModal({
                             )}
                         </div>
                     </form>
+
+                    {/* Idővonal csak meglévő feladatnál — új feladatnak még nincs id-je. */}
+                    {task && (
+                        <div className="mt-5">
+                            <TaskTimeline taskId={task.id} statuses={statuses} />
+                        </div>
+                    )}
                 </DialogPanel>
             </div>
         </Dialog>
@@ -482,6 +508,12 @@ function TaskCard({
                             {task.attachments.length}
                         </span>
                     )}
+                    {task.comments_count > 0 && (
+                        <span className="flex items-center gap-1" title="Hozzászólások">
+                            <MessageSquare size={11} />
+                            {task.comments_count}
+                        </span>
+                    )}
                 </div>
 
             {task.assignees.length > 0 && (
@@ -506,8 +538,19 @@ function TaskCard({
 /* ------------------------------------------------------------------ */
 
 export default function Index() {
-    const { tasks, filters, scopeCounts, statuses, priorities, users, creators, projects, auth } =
-        usePageProps<IndexProps>();
+    const {
+        tasks,
+        filters,
+        scopeCounts,
+        stateCounts,
+        recentDoneDays,
+        statuses,
+        priorities,
+        users,
+        creators,
+        projects,
+        auth,
+    } = usePageProps<IndexProps>();
 
     const canCreate = auth.permissions.includes('tasks.create');
     const canDelete = auth.permissions.includes('tasks.delete');
@@ -524,6 +567,9 @@ export default function Index() {
     const [assignee, setAssignee] = useState(filters.assignee ? String(filters.assignee) : '');
     const [scope, setScope] = useState<TaskScope>(filters.scope);
     const [mine, setMine] = useState(filters.mine);
+    const [state, setState] = useState<TaskState>(filters.state);
+    const [doneFrom, setDoneFrom] = useState(filters.done_from);
+    const [doneTo, setDoneTo] = useState(filters.done_to);
     const firstRender = useRef(true);
 
     useEffect(() => {
@@ -543,17 +589,44 @@ export default function Index() {
                     assignee: assignee || undefined,
                     scope: scope || undefined,
                     mine: mine ? 1 : undefined,
+                    // Az 'active' az alapértelmezés, azt nem tesszük az URL-be.
+                    state: state === 'active' ? undefined : state,
+                    // A lezárási dátumszűrő csak az archívumban értelmezett.
+                    done_from: state === 'done' ? doneFrom || undefined : undefined,
+                    done_to: state === 'done' ? doneTo || undefined : undefined,
                 },
                 { preserveState: true, replace: true },
             );
         }, 300);
         return () => clearTimeout(t);
-    }, [search, project, priority, creator, assignee, scope, mine]);
+    }, [search, project, priority, creator, assignee, scope, mine, state, doneFrom, doneTo]);
+
+    // Az archívumban a legutóbb lezárt legyen elöl, visszaváltáskor a határidő.
+    const switchState = (next: TaskState) => {
+        setState(next);
+        setSort(next === 'done' ? 'completed_desc' : 'due_asc');
+    };
 
     const SCOPE_TABS: { value: TaskScope; label: string; count: number }[] = [
         { value: '', label: 'Összes', count: scopeCounts.all },
         { value: 'project', label: 'Projektfeladatok', count: scopeCounts.project },
         { value: 'internal', label: 'Belső feladatok', count: scopeCounts.internal },
+    ];
+
+    const STATE_TABS: { value: TaskState; label: string; count: number; title: string }[] = [
+        {
+            value: 'active',
+            label: 'Aktuális',
+            count: stateCounts.active,
+            title: `Nyitott feladatok + az utóbbi ${recentDoneDays} napban lezártak`,
+        },
+        {
+            value: 'done',
+            label: 'Archívum',
+            count: stateCounts.done,
+            title: 'Lezárt (kész) feladatok — kereshetően',
+        },
+        { value: 'all', label: 'Összes', count: stateCounts.all, title: 'Minden feladat' },
     ];
 
     const sortedTasks = useMemo(() => {
@@ -576,6 +649,8 @@ export default function Index() {
                 );
             case 'created_desc':
                 return copy.sort((a, b) => b.created_at.localeCompare(a.created_at));
+            case 'completed_desc':
+                return copy.sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''));
             default:
                 return copy.sort(byDue);
         }
@@ -601,6 +676,22 @@ export default function Index() {
     );
     const hasFilters = hasOtherFilters || !!filters.scope;
 
+    const emptyStateText = (() => {
+        if (state === 'done') {
+            return 'A megadott feltételekkel nincs kész feladat az archívumban.';
+        }
+        if (state === 'active' && stateCounts.done > 0 && !hasOtherFilters) {
+            return `Minden aktuális feladat elkészült — a lezártak (${stateCounts.done}) az Archívumban vannak.`;
+        }
+        if (scope === 'internal' && !hasOtherFilters) {
+            return 'Még nincs belső feladat. Vegyen fel egyet projekt nélkül — csak a cégen belüli teendőkhöz.';
+        }
+        if (hasFilters) {
+            return 'A szűrésnek megfelelő feladat nincs — módosítsa a feltételeket.';
+        }
+        return 'Hozza létre az első feladatot, és kövesse listán vagy kanban táblán.';
+    })();
+
     return (
         <>
             <Head title="Feladatok" />
@@ -620,6 +711,73 @@ export default function Index() {
                     )
                 }
             />
+
+            {/* Állapot-váltó: aktuális / archívum / összes */}
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+                <div className="inline-flex rounded-md border border-line bg-white p-0.5">
+                    {STATE_TABS.map((tab) => (
+                        <button
+                            key={tab.value}
+                            onClick={() => switchState(tab.value)}
+                            title={tab.title}
+                            className={clsx(
+                                'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition',
+                                state === tab.value
+                                    ? 'bg-sidebar text-white'
+                                    : 'text-ink-soft hover:text-ink',
+                            )}
+                        >
+                            {tab.value === 'done' && <Archive size={14} />}
+                            {tab.label}
+                            <span
+                                className={clsx(
+                                    'rounded-sm px-1.5 py-0.5 text-[11px]',
+                                    state === tab.value ? 'bg-white/20 text-white' : 'bg-cream text-ink-faint',
+                                )}
+                            >
+                                {tab.count}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                {state === 'active' && (
+                    <span className="text-xs text-ink-faint">
+                        A lezárt feladatok {recentDoneDays} nap után az Archívumba kerülnek.
+                    </span>
+                )}
+
+                {/* Archívum: szűkítés a lezárás dátumára */}
+                {state === 'done' && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+                        <span>Lezárva:</span>
+                        <input
+                            type="date"
+                            value={doneFrom}
+                            onChange={(e) => setDoneFrom(e.target.value)}
+                            className="rounded-md border-line bg-white py-1 text-xs focus:border-accent focus:ring-accent/30"
+                        />
+                        <span>–</span>
+                        <input
+                            type="date"
+                            value={doneTo}
+                            onChange={(e) => setDoneTo(e.target.value)}
+                            className="rounded-md border-line bg-white py-1 text-xs focus:border-accent focus:ring-accent/30"
+                        />
+                        {(doneFrom || doneTo) && (
+                            <button
+                                onClick={() => {
+                                    setDoneFrom('');
+                                    setDoneTo('');
+                                }}
+                                className="rounded px-1.5 py-0.5 text-ink-faint hover:text-coral"
+                            >
+                                Törlés
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Hatókör-váltó: összes / projektfeladatok / belső feladatok */}
             <div className="mb-4 inline-flex rounded-md border border-line bg-white p-0.5">
@@ -754,14 +912,10 @@ export default function Index() {
                     <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent-50 text-accent">
                         <ListChecks size={26} />
                     </span>
-                    <h2 className="mt-4 text-lg font-semibold text-sidebar">Nincs feladat</h2>
-                    <p className="mt-1 max-w-sm text-sm text-ink-soft">
-                        {scope === 'internal' && !hasOtherFilters
-                            ? 'Még nincs belső feladat. Vegyen fel egyet projekt nélkül — csak a cégen belüli teendőkhöz.'
-                            : hasFilters
-                              ? 'A szűrésnek megfelelő feladat nincs — módosítsa a feltételeket.'
-                              : 'Hozza létre az első feladatot, és kövesse listán vagy kanban táblán.'}
-                    </p>
+                    <h2 className="mt-4 text-lg font-semibold text-sidebar">
+                        {state === 'done' ? 'Nincs lezárt feladat' : 'Nincs feladat'}
+                    </h2>
+                    <p className="mt-1 max-w-sm text-sm text-ink-soft">{emptyStateText}</p>
                 </div>
             ) : view === 'kanban' ? (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -784,6 +938,11 @@ export default function Index() {
                                 <div className="mb-3 flex items-center justify-between px-1">
                                     <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
                                         {statuses[status]}
+                                        {status === 'kesz' && state === 'active' && (
+                                            <span className="ml-1.5 font-normal normal-case text-ink-faint">
+                                                (utóbbi {recentDoneDays} nap)
+                                            </span>
+                                        )}
                                     </h2>
                                     <span className="rounded-sm bg-white px-1.5 py-0.5 text-xs font-medium text-ink-faint">
                                         {column.length}
@@ -798,14 +957,26 @@ export default function Index() {
                                             onOpen={() => setModal({ task, status })}
                                         />
                                     ))}
-                                    {canCreate && (
+                                    {/* A Kész oszlop nem hízik a végtelenségig: itt csak a
+                                        frissen lezártak vannak, a többi az Archívumban. */}
+                                    {status === 'kesz' && state === 'active' ? (
                                         <button
-                                            onClick={() => setModal({ task: null, status })}
+                                            onClick={() => switchState('done')}
                                             className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-line py-2 text-xs text-ink-faint transition hover:border-accent/40 hover:text-accent"
                                         >
-                                            <Plus size={13} />
-                                            Feladat ide
+                                            <Archive size={13} />
+                                            Korábban lezártak ({stateCounts.done})
                                         </button>
+                                    ) : (
+                                        canCreate && (
+                                            <button
+                                                onClick={() => setModal({ task: null, status })}
+                                                className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-line py-2 text-xs text-ink-faint transition hover:border-accent/40 hover:text-accent"
+                                            >
+                                                <Plus size={13} />
+                                                Feladat ide
+                                            </button>
+                                        )
                                     )}
                                 </div>
                             </div>
@@ -826,6 +997,9 @@ export default function Index() {
                                 <th className="px-3 py-2.5 font-semibold">Határidő</th>
                                 <th className="px-3 py-2.5 font-semibold">Prioritás</th>
                                 <th className="px-3 py-2.5 font-semibold">Státusz</th>
+                                {state !== 'active' && (
+                                    <th className="px-3 py-2.5 font-semibold">Lezárva</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody>
@@ -854,6 +1028,15 @@ export default function Index() {
                                                 >
                                                     <Paperclip size={12} />
                                                     {task.attachments.length}
+                                                </span>
+                                            )}
+                                            {task.comments_count > 0 && (
+                                                <span
+                                                    className="flex items-center gap-0.5 text-xs text-ink-faint"
+                                                    title={`${task.comments_count} hozzászólás`}
+                                                >
+                                                    <MessageSquare size={12} />
+                                                    {task.comments_count}
                                                 </span>
                                             )}
                                         </div>
@@ -905,6 +1088,11 @@ export default function Index() {
                                             {statuses[task.status]}
                                         </span>
                                     </td>
+                                    {state !== 'active' && (
+                                        <td className="whitespace-nowrap px-3 py-2.5 text-xs text-ink-faint">
+                                            {task.completed_at ? fmtDate(task.completed_at) : '–'}
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>

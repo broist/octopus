@@ -7,7 +7,9 @@ use App\Models\Document;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskAttachment;
+use App\Models\TaskComment;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +20,13 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class TaskController extends Controller
 {
+    /**
+     * Az „Aktuális" nézetben a lezárt feladatok ennyi napig maradnak még
+     * láthatók (a kanban Kész oszlopa se legyen üres), utána az Archívumba
+     * kerülnek — ott dátum- és szövegkereséssel bármikor előhúzhatók.
+     */
+    private const RECENT_DONE_DAYS = 7;
+
     public function index(Request $request): Response
     {
         $search = $request->string('search')->toString();
@@ -28,8 +37,17 @@ class TaskController extends Controller
         $scope = $request->string('scope')->toString(); // '' | 'project' | 'internal'
         $mine = $request->boolean('mine');
 
-        // A hatókör (scope) kivételével minden szűrő közös — a lista és a
-        // hatókör-darabszámok is ezt használják.
+        // Állapot: aktuális (alap) | archívum (lezárt) | összes.
+        $state = $request->string('state')->toString();
+        if (! in_array($state, ['active', 'done', 'all'], true)) {
+            $state = 'active';
+        }
+        // Archívum-szűkítés lezárás dátumára (csak a 'done' nézetben).
+        $doneFrom = $request->string('done_from')->toString();
+        $doneTo = $request->string('done_to')->toString();
+
+        // A hatókör (scope) és az állapot (state) kivételével minden szűrő közös —
+        // a lista és mindkét szegmens-váltó darabszámai is ezt használják.
         $applyFilters = fn ($q) => $q
             ->when($mine, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->where('users.id', $request->user()->id)))
             ->when($assigneeId > 0, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->where('users.id', $assigneeId)))
@@ -38,17 +56,39 @@ class TaskController extends Controller
             ->when($creatorId > 0, fn ($q) => $q->where('created_by', $creatorId))
             ->when($search !== '', fn ($q) => $q->where('title', 'ilike', "%{$search}%"));
 
+        $applyScope = fn ($q) => $q
+            ->when($scope === 'project', fn ($q) => $q->whereNotNull('project_id'))
+            ->when($scope === 'internal', fn ($q) => $q->whereNull('project_id'));
+
+        // Az „aktuális" a nyitott feladatok + a frissen lezártak; az archívum a
+        // többi kész feladat, opcionális lezárási dátumszűréssel.
+        $applyState = fn ($q, string $s) => match ($s) {
+            'done' => $q->where('status', 'kesz')
+                ->when($doneFrom !== '', fn ($q) => $q->whereDate('completed_at', '>=', $doneFrom))
+                ->when($doneTo !== '', fn ($q) => $q->whereDate('completed_at', '<=', $doneTo)),
+            'all' => $q,
+            default => $q->where(fn ($q) => $q
+                ->where('status', '!=', 'kesz')
+                ->orWhere('completed_at', '>=', now()->subDays(self::RECENT_DONE_DAYS))),
+        };
+
         // Hatókör-darabszámok (a scope szűrő nélkül) — a szegmens-váltóhoz.
         $scopeCounts = [
-            'all' => $applyFilters(Task::query())->count(),
-            'project' => $applyFilters(Task::query())->whereNotNull('project_id')->count(),
-            'internal' => $applyFilters(Task::query())->whereNull('project_id')->count(),
+            'all' => $applyState($applyFilters(Task::query()), $state)->count(),
+            'project' => $applyState($applyFilters(Task::query()), $state)->whereNotNull('project_id')->count(),
+            'internal' => $applyState($applyFilters(Task::query()), $state)->whereNull('project_id')->count(),
         ];
 
-        $tasks = $applyFilters(Task::query())
-            ->when($scope === 'project', fn ($q) => $q->whereNotNull('project_id'))
-            ->when($scope === 'internal', fn ($q) => $q->whereNull('project_id'))
+        // Állapot-darabszámok (a state szűrő nélkül) — az Aktuális/Archívum váltóhoz.
+        $stateCounts = [
+            'active' => $applyState($applyScope($applyFilters(Task::query())), 'active')->count(),
+            'done' => $applyScope($applyFilters(Task::query()))->where('status', 'kesz')->count(),
+            'all' => $applyScope($applyFilters(Task::query()))->count(),
+        ];
+
+        $tasks = $applyState($applyScope($applyFilters(Task::query())), $state)
             ->with(['project:id,code,name', 'assignees:id,name', 'creator:id,name', 'attachments'])
+            ->withCount(['comments as comments_count' => fn ($q) => $q->where('kind', TaskComment::KIND_COMMENT)])
             ->orderByRaw("case priority when 'magas' then 0 when 'kozepes' then 1 else 2 end")
             ->orderByRaw('due_on asc nulls last')
             ->orderBy('id')
@@ -69,6 +109,7 @@ class TaskController extends Controller
                 'created_at' => $t->created_at->toIso8601String(),
                 'can_move' => $t->canBeMovedBy($request->user()),
                 'completed_at' => $t->completed_at?->toIso8601String(),
+                'comments_count' => (int) $t->comments_count,
                 'attachments' => $t->attachments->map(fn (TaskAttachment $a) => [
                     'id' => $a->id,
                     'name' => $a->original_filename,
@@ -88,8 +129,13 @@ class TaskController extends Controller
                 'assignee' => $assigneeId ?: null,
                 'scope' => $scope,
                 'mine' => $mine,
+                'state' => $state,
+                'done_from' => $doneFrom,
+                'done_to' => $doneTo,
             ],
             'scopeCounts' => $scopeCounts,
+            'stateCounts' => $stateCounts,
+            'recentDoneDays' => self::RECENT_DONE_DAYS,
             'statuses' => Task::STATUSES,
             'priorities' => Task::PRIORITIES,
             'users' => User::where('is_active', true)->where('is_external', false)
@@ -119,6 +165,7 @@ class TaskController extends Controller
         $task->assignees()->sync($data['assignees'] ?? []);
         $this->storeAttachments($request, $task);
 
+        $task->logStatusChange(null, $task->status, $request->user());
         $task->project?->logActivity('feladat', "Új feladat: {$task->title}");
 
         return back()->with('success', 'A feladat létrehozva.');
@@ -128,6 +175,7 @@ class TaskController extends Controller
     {
         $data = $request->validated();
         $wasDone = $task->status === 'kesz';
+        $previousStatus = $task->status;
 
         $task->update([
             'title' => $data['title'],
@@ -152,6 +200,8 @@ class TaskController extends Controller
 
         $this->storeAttachments($request, $task);
 
+        $task->logStatusChange($previousStatus, $task->status, $request->user());
+
         if (! $wasDone && $task->status === 'kesz') {
             $task->project?->logActivity('feladat', "Feladat elkészült: {$task->title}");
         }
@@ -173,15 +223,57 @@ class TaskController extends Controller
         abort_unless($task->canBeMovedBy($request->user()), 403);
 
         $wasDone = $task->status === 'kesz';
+        $previousStatus = $task->status;
 
         $task->update([
             'status' => $data['status'],
             'completed_at' => $data['status'] === 'kesz' ? ($task->completed_at ?? now()) : null,
         ]);
 
+        $task->logStatusChange($previousStatus, $task->status, $request->user());
+
         if (! $wasDone && $task->status === 'kesz') {
             $task->project?->logActivity('feladat', "Feladat elkészült: {$task->title}");
         }
+
+        return back();
+    }
+
+    /**
+     * A feladat idővonala (hozzászólások + státuszváltások) JSON-ban — a
+     * feladat-modal nyitásakor töltjük, hogy a lista ne cipelje magával.
+     */
+    public function timeline(Request $request, Task $task): JsonResponse
+    {
+        $entries = $task->comments()->with('user:id,name')->get()
+            ->map(fn (TaskComment $c) => $c->toTimelineArray($request->user()))
+            ->values();
+
+        return response()->json(['entries' => $entries]);
+    }
+
+    /** Új hozzászólás a feladathoz — a feladatot látó bármelyik felhasználótól. */
+    public function storeComment(Request $request, Task $task): RedirectResponse
+    {
+        $data = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $task->comments()->create([
+            'user_id' => $request->user()->id,
+            'kind' => TaskComment::KIND_COMMENT,
+            'body' => trim($data['body']),
+        ]);
+
+        return back(); // az idővonalat a modal tölti újra
+    }
+
+    /** Hozzászólás törlése: a saját bejegyzését bárki, másét a tasks.delete jog. */
+    public function destroyComment(Request $request, TaskComment $comment): RedirectResponse
+    {
+        abort_unless($comment->canBeDeletedBy($request->user()), 403);
+
+        $comment->delete();
 
         return back();
     }
