@@ -1,6 +1,6 @@
-# 🐙 Octopus — Építőipari projektvezető rendszer
+# 🐙 Octopus — AcuWall projektvezető rendszer
 
-Projektvezető és rendszerező webalkalmazás építőipari cégeknek. Böngészőből,
+Projektvezető és rendszerező webalkalmazás az AcuWall csapatának. Böngészőből,
 telefonról és tabletről is használható (PWA), self-hosted Linux szerverre tervezve.
 
 - **Backend:** Laravel 13 (PHP 8.4), Inertia.js 2
@@ -207,7 +207,35 @@ Agent integráció szándékosan a legutolsó lépés.
 | 14 | Kommunikáció | ⬜ |
 | 15 | Riportok / Statisztikák | ⬜ |
 | 16 | Felhasználók / Jogosultságok – munkatársak, szerepkörök, aktiválás | ✅ kész |
+| — | Ügyfélportál – megrendelői belépés, megosztott projektek, dokumentumok, haladás-napló, ajánlat-elfogadás | ✅ kész |
 | 17 | Számlázz.hu integráció | ⬜ (legutolsó) |
+
+## Ügyfélportál (`/ugyfel`)
+
+A megrendelő saját, letisztult felületet kap: projektjeinek készültsége és
+ütemterve, a neki megosztott dokumentumok, a helyszíni haladás fotókkal, és az
+árajánlatai — amelyeket online el is fogadhat vagy elutasíthat (a projektvezető
+harang-értesítést kap róla).
+
+- **Hozzáférés:** a megrendelő nem regisztrál. Az adminisztrátor a CRM partner
+  adatlapján hoz létre neki belépést („Ügyfélportál" kártya); a fiók külső
+  (`is_external`), a partnerhez kötött, és a jogosultság nélküli „Megrendelő"
+  szerepet kapja. A belépési adatokat az adminisztrátor adja át — a rendszer nem
+  küld e-mailt.
+- **Láthatóság:** semmi nem látszik magától. Minden megosztható elem
+  `client_visible` kapcsolót kap, ami alapból **ki van kapcsolva**. A kapcsolók
+  egy helyen élnek: a projekt adatlapjának **Ügyfélportál** fülén (projekt,
+  dokumentumok, napi jelentések), az árajánlatoké pedig az Ajánlatkérő **Ügyfél
+  nézet** fülén.
+- **Ami soha nem megy ki:** költség, árrés, alvállalkozói adat, belső leírás és
+  jegyzet, a napi jelentés akadály- és létszámmezői. A portál külön, szűk
+  payloadot állít össze — nem a belső nézetet szűri.
+- **Elválasztás:** a külső fiókokat a `RedirectExternalUsers` middleware a
+  portálon tartja (belső útvonalra lépve átirányítja, íráskor 403), a portál
+  útvonalait pedig a `portal` middleware őrzi.
+
+> Az ügyfélnek szánt projekt-összefoglaló külön mező (`client_summary`) — a
+> belső leírás nem kerül a megrendelő szeme elé.
 
 > Modulokon átívelő extra: a **webes ajánlatkérések** (acuwall.hu űrlap →
 > e-mail) automatikusan projektet + ügyfelet + felületi értesítést hoznak létre

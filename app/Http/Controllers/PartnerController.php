@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\PartnerRequest;
 use App\Models\Partner;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -58,13 +59,15 @@ class PartnerController extends Controller
             ->with('success', "{$partner->name} felvéve a partnerek közé.");
     }
 
-    public function show(Partner $partner): Response
+    public function show(Request $request, Partner $partner): Response
     {
         $partner->loadCount('projects');
         $partner->load([
             'projects' => fn ($q) => $q->with('projectManager:id,name')
                 ->orderByDesc('updated_at'),
         ]);
+
+        $user = $request->user();
 
         return Inertia::render('CRM/Show', [
             'partner' => [
@@ -82,8 +85,27 @@ class PartnerController extends Controller
                 'pm_name' => $p->projectManager?->name,
                 'starts_on' => $p->starts_on?->toDateString(),
                 'ends_on' => $p->ends_on?->toDateString(),
+                'client_visible' => (bool) $p->client_visible,
             ])->values(),
             'statuses' => \App\Models\Project::STATUSES,
+            // Ügyfélportál: a partnerhez tartozó külső belépések.
+            'portalUsers' => User::where('is_external', true)
+                ->where('partner_id', $partner->id)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email', 'is_active', 'created_at'])
+                ->map(fn (User $u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'email' => $u->email,
+                    'is_active' => (bool) $u->is_active,
+                    'created_at' => $u->created_at?->toIso8601String(),
+                ])
+                ->values(),
+            'portalCan' => [
+                'create' => $user->can('users.create'),
+                'edit' => $user->can('users.edit'),
+                'delete' => $user->can('users.delete'),
+            ],
         ]);
     }
 

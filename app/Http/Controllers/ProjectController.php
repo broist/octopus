@@ -170,6 +170,9 @@ class ProjectController extends Controller
             // Csak a felhasználó számára látható (mappa-ACL) dokumentumok.
             'documents' => fn ($q) => $q->visibleTo($request->user())
                 ->with(['currentVersion', 'uploader:id,name']),
+            // Az ügyfélportál-megosztás panel köre.
+            'dailyReports' => fn ($q) => $q->withCount('photos'),
+            'quotes' => fn ($q) => $q->orderByDesc('updated_at'),
         ]);
 
         return Inertia::render('Projects/Show', [
@@ -219,10 +222,50 @@ class ProjectController extends Controller
                 'download_version_id' => $d->currentVersion?->id,
                 'uploader_name' => $d->uploader?->name,
                 'updated_at' => $d->updated_at->toIso8601String(),
+                'client_visible' => (bool) $d->client_visible,
             ])->values(),
+            'clientSharing' => $this->clientSharingPayload($project),
             'statuses' => Project::STATUSES,
             'types' => Project::CONSTRUCTION_TYPES,
         ]);
+    }
+
+    /**
+     * Az „Ügyfélportál" fül adatai: mit oszt meg a projekt a megrendelővel.
+     *
+     * @return array<string, mixed>
+     */
+    private function clientSharingPayload(Project $project): array
+    {
+        return [
+            'enabled' => (bool) $project->client_visible,
+            'summary' => $project->client_summary,
+            'client_name' => $project->client?->name,
+            'client_id' => $project->client_id,
+            // Van-e egyáltalán kinek megmutatni: aktív portál-belépés a megrendelőnél.
+            'has_access' => $project->client_id !== null && User::where('is_external', true)
+                ->where('is_active', true)
+                ->where('partner_id', $project->client_id)
+                ->exists(),
+            'reports' => $project->dailyReports->map(fn ($r) => [
+                'id' => $r->id,
+                'report_date' => $r->report_date->toDateString(),
+                'work_done' => $r->work_done,
+                'photos_count' => (int) $r->photos_count,
+                'client_visible' => (bool) $r->client_visible,
+            ])->values(),
+            'quotes' => $project->quotes->map(fn ($q) => [
+                'id' => $q->id,
+                'quote_number' => $q->quote_number,
+                'project_name' => $q->project_name,
+                'gross_offer' => (int) $q->gross_offer,
+                'is_final' => $q->status === 'jóváhagyva',
+                'client_visible' => (bool) $q->client_visible,
+                'response' => $q->client_response,
+                'response_label' => \App\Models\Quote::CLIENT_RESPONSES[$q->client_response] ?? null,
+                'responded_at' => $q->client_responded_at?->toIso8601String(),
+            ])->values(),
+        ];
     }
 
     public function edit(Project $project): Response

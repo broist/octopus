@@ -2,8 +2,8 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "octopus/octopus",
     "type": "project",
-    "description": "Octopus – Építőipari projektvezető és rendszerező alkalmazás.",
-    "keywords": ["laravel", "construction", "project-management"],
+    "description": "Octopus – AcuWall projektvezető és rendszerező alkalmazás.",
+    "keywords": ["laravel", "project-management"],
     "license": "proprietary",
     "require": {
         "php": "^8.3",

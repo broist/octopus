@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientSharingController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectPhaseController;
 use Illuminate\Support\Facades\Route;
@@ -36,6 +37,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/projects/{project}', [ProjectController::class, 'destroy'])
         ->middleware('can:projects.delete')->name('projects.destroy');
+
+    // Ügyfélportál: mit lásson a megrendelő ebből a projektből
+    Route::put('/projects/{project}/ugyfel-megosztas', [ClientSharingController::class, 'project'])
+        ->middleware('can:projects.edit')->name('projects.client-sharing');
 
     // Fázisok
     Route::post('/projects/{project}/phases', [ProjectPhaseController::class, 'store'])

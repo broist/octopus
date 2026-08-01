@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientPortalAccessController;
 use App\Http\Controllers\PartnerController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,4 +29,17 @@ Route::middleware(['auth'])->group(function () {
 
     Route::delete('/crm/{partner}', [PartnerController::class, 'destroy'])
         ->middleware('can:crm.delete')->name('crm.destroy');
+
+    /*
+    | Ügyfélportál-hozzáférés a megrendelőnek. Fiókot érint, ezért a
+    | Felhasználók modul jogaihoz kötött — a CRM-ben csak a helye van.
+    */
+    Route::post('/crm/{partner}/portal', [ClientPortalAccessController::class, 'store'])
+        ->middleware('can:users.create')->name('crm.portal.store');
+
+    Route::put('/crm/{partner}/portal/{user}', [ClientPortalAccessController::class, 'update'])
+        ->middleware('can:users.edit')->name('crm.portal.update');
+
+    Route::delete('/crm/{partner}/portal/{user}', [ClientPortalAccessController::class, 'destroy'])
+        ->middleware('can:users.delete')->name('crm.portal.destroy');
 });

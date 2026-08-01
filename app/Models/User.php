@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -34,6 +35,7 @@ class User extends Authenticatable
         'locale',
         'is_active',
         'is_external',
+        'partner_id',
     ];
 
     /**
@@ -86,6 +88,25 @@ class User extends Authenticatable
     public function calendarCredentials(): HasMany
     {
         return $this->hasMany(CalendarCredential::class)->orderByDesc('created_at');
+    }
+
+    // --- Ügyfélportál ---
+
+    /**
+     * Külső (portál-) fióknál az a megrendelő, akinek a tartalmát látja.
+     */
+    public function partner(): BelongsTo
+    {
+        return $this->belongsTo(Partner::class);
+    }
+
+    /**
+     * Beléphet-e az ügyfélportálra: külső fiók, aktív, és van partnere.
+     * A partner-kötés maga a hozzáférés-vezérlés — enélkül nincs mit mutatni.
+     */
+    public function isClientPortalUser(): bool
+    {
+        return $this->is_external && $this->is_active && $this->partner_id !== null;
     }
 
     /**

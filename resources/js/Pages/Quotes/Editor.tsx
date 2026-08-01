@@ -17,6 +17,10 @@ import CalculationTab from '@/Pages/Quotes/Partials/CalculationTab';
 import ConditionsTab from '@/Pages/Quotes/Partials/ConditionsTab';
 import PaymentsTab from '@/Pages/Quotes/Partials/PaymentsTab';
 import PreviewTab from '@/Pages/Quotes/Partials/PreviewTab';
+import type {
+    QuoteClientSharing,
+    QuoteProjectOption,
+} from '@/Pages/Quotes/Partials/PortalShareCard';
 import { calcProject, fmtHuf } from '@/lib/quote';
 import type { QuoteCategory, QuoteData, QuoteItem, FolderOption } from '@/types/quote';
 
@@ -31,6 +35,8 @@ interface EditorProps extends Record<string, unknown> {
     };
     tab: string;
     folders: FolderOption[];
+    clientSharing: QuoteClientSharing;
+    projects: QuoteProjectOption[];
     can: { edit: boolean; delete: boolean };
 }
 
@@ -79,7 +85,7 @@ function newCategory(): QuoteCategory {
 }
 
 export default function Editor() {
-    const { quote, tab, folders, can } = usePageProps<EditorProps>();
+    const { quote, tab, folders, clientSharing, projects, can } = usePageProps<EditorProps>();
 
     const [data, setData] = useState<QuoteData>(quote.data);
     const [activeTab, setActiveTab] = useState<TabKey>(
@@ -340,6 +346,10 @@ export default function Editor() {
                     data={data}
                     totals={totals}
                     folders={folders}
+                    sharing={clientSharing}
+                    projects={projects}
+                    isFinal={approved}
+                    canEdit={can.edit}
                     setField={setField}
                 />
             )}

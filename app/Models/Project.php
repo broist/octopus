@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -49,6 +50,8 @@ class Project extends Model
         'starts_on',
         'ends_on',
         'description',
+        'client_visible',
+        'client_summary',
     ];
 
     protected function casts(): array
@@ -59,6 +62,7 @@ class Project extends Model
             'latitude' => 'float',
             'longitude' => 'float',
             'contract_value' => 'decimal:2',
+            'client_visible' => 'boolean',
         ];
     }
 
@@ -167,6 +171,15 @@ class Project extends Model
     public function dailyReports(): HasMany
     {
         return $this->hasMany(DailyReport::class)->orderByDesc('report_date');
+    }
+
+    /**
+     * Ügyfélportál: a megrendelő azon projektjei, amelyeket kifejezetten
+     * megosztottak vele. A `client_visible` alapból hamis — ez a kapu.
+     */
+    public function scopeSharedWithClient(Builder $query, int $partnerId): Builder
+    {
+        return $query->where('client_id', $partnerId)->where('client_visible', true);
     }
 
     /* ------------------------------------------------------------------ */

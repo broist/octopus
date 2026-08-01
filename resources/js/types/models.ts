@@ -171,6 +171,47 @@ export interface ProjectDocumentRow {
     download_version_id: number | null;
     uploader_name: string | null;
     updated_at: string;
+    client_visible: boolean;
+}
+
+// --- Ügyfélportál-megosztás (a projekt adatlapján) ---
+
+export interface ClientSharingReport {
+    id: number;
+    report_date: string;
+    work_done: string | null;
+    photos_count: number;
+    client_visible: boolean;
+}
+
+export interface ClientSharingQuote {
+    id: number;
+    quote_number: string | null;
+    project_name: string;
+    gross_offer: number;
+    is_final: boolean;
+    client_visible: boolean;
+    response: string | null;
+    response_label: string | null;
+    responded_at: string | null;
+}
+
+export interface ClientSharing {
+    enabled: boolean;
+    summary: string | null;
+    client_name: string | null;
+    client_id: number | null;
+    has_access: boolean;
+    reports: ClientSharingReport[];
+    quotes: ClientSharingQuote[];
+}
+
+export interface PortalAccessUser {
+    id: number;
+    name: string;
+    email: string;
+    is_active: boolean;
+    created_at: string | null;
 }
 
 export type TaskStatus = 'teendo' | 'folyamatban' | 'kesz';
@@ -293,6 +334,7 @@ export interface PartnerProjectRow {
     pm_name: string | null;
     starts_on: string | null;
     ends_on: string | null;
+    client_visible: boolean;
 }
 
 // --- Alvállalkozók (5. modul) ---

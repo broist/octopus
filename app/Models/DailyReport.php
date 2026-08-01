@@ -31,6 +31,7 @@ class DailyReport extends Model
         'machine_movement',
         'weather',
         'weather_fetched_at',
+        'client_visible',
     ];
 
     protected function casts(): array
@@ -40,6 +41,7 @@ class DailyReport extends Model
             'own_headcount' => 'integer',
             'weather' => 'array',
             'weather_fetched_at' => 'datetime',
+            'client_visible' => 'boolean',
         ];
     }
 

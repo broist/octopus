@@ -33,6 +33,16 @@ class Quote extends Model
         'created_by',
         'approved_at',
         'approved_by',
+        'client_visible',
+        'client_response',
+        'client_response_note',
+        'client_responded_at',
+    ];
+
+    /** Az ügyfél online visszajelzésének lehetséges értékei. */
+    public const CLIENT_RESPONSES = [
+        'elfogadva' => 'Elfogadva',
+        'elutasitva' => 'Elutasítva',
     ];
 
     protected function casts(): array
@@ -40,6 +50,8 @@ class Quote extends Model
         return [
             'data' => 'array',
             'approved_at' => 'datetime',
+            'client_visible' => 'boolean',
+            'client_responded_at' => 'datetime',
         ];
     }
 

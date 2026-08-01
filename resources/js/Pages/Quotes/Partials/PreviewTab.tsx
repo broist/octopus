@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Download, FolderOpen } from 'lucide-react';
 import clsx from 'clsx';
 import SavePdfDialog from '@/Pages/Quotes/Partials/SavePdfDialog';
+import PortalShareCard from '@/Pages/Quotes/Partials/PortalShareCard';
+import type { QuoteClientSharing, QuoteProjectOption } from '@/Pages/Quotes/Partials/PortalShareCard';
 import { calcItem, fmtHuf, fmtPercent } from '@/lib/quote';
 import type { ProjectCalc } from '@/lib/quote';
 import type { FolderOption, PdfMode, QuoteData } from '@/types/quote';
@@ -11,6 +13,10 @@ interface Props {
     data: QuoteData;
     totals: ProjectCalc;
     folders: FolderOption[];
+    sharing: QuoteClientSharing;
+    projects: QuoteProjectOption[];
+    isFinal: boolean;
+    canEdit: boolean;
     setField: <K extends keyof QuoteData>(key: K, value: QuoteData[K]) => void;
 }
 
@@ -23,7 +29,17 @@ const SECTION_LABELS: [keyof QuoteData['sections'], string][] = [
     ['nextStep', 'Következő lépés'],
 ];
 
-export default function PreviewTab({ quoteId, data, totals, folders, setField }: Props) {
+export default function PreviewTab({
+    quoteId,
+    data,
+    totals,
+    folders,
+    sharing,
+    projects,
+    isFinal,
+    canEdit,
+    setField,
+}: Props) {
     const [saveOpen, setSaveOpen] = useState(false);
     const mode: PdfMode = data.pdfMode ?? 'summary';
     const showQty = !!data.showQuantitiesToCustomer;
@@ -81,6 +97,15 @@ export default function PreviewTab({ quoteId, data, totals, folders, setField }:
                     </button>
                 </div>
             </div>
+
+            {/* Ügyfélportál: projekthez kötés, megosztás, visszajelzés */}
+            <PortalShareCard
+                quoteId={quoteId}
+                sharing={sharing}
+                projects={projects}
+                isFinal={isFinal}
+                canEdit={canEdit}
+            />
 
             {/* Branded ügyfél-előnézet */}
             <div className="o-card overflow-hidden">

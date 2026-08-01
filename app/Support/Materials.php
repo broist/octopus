@@ -9,7 +9,7 @@ namespace App\Support;
 class Materials
 {
     /**
-     * Anyagkategóriák (építőipari gyakorlat szerint).
+     * Anyagkategóriák (a kivitelezői gyakorlat szerint).
      *
      * @return array<string, string>
      */

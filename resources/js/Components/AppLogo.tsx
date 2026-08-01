@@ -37,7 +37,7 @@ export default function AppLogo({
                             light ? 'text-white/55' : 'text-accent',
                         )}
                     >
-                        Építőipar
+                        AcuWall
                     </div>
                 </div>
             )}

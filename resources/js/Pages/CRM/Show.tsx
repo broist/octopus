@@ -19,13 +19,16 @@ import AppLayout from '@/Layouts/AppLayout';
 import PageHeader from '@/Components/PageHeader';
 import StatusChip from '@/Components/StatusChip';
 import PartnerModal from '@/Pages/CRM/Partials/PartnerModal';
+import PortalAccessCard from '@/Pages/CRM/Partials/PortalAccessCard';
 import { usePageProps } from '@/hooks/usePageProps';
 import { fmtDate } from '@/lib/format';
-import type { PartnerDetail, PartnerProjectRow } from '@/types/models';
+import type { PartnerDetail, PartnerProjectRow, PortalAccessUser } from '@/types/models';
 
 interface ShowProps extends Record<string, unknown> {
     partner: PartnerDetail;
     projects: PartnerProjectRow[];
+    portalUsers: PortalAccessUser[];
+    portalCan: { create: boolean; edit: boolean; delete: boolean };
 }
 
 const ROLE_CHIP: Record<string, string> = {
@@ -55,7 +58,7 @@ function InfoRow({
 }
 
 export default function Show() {
-    const { partner, projects, auth } = usePageProps<ShowProps>();
+    const { partner, projects, portalUsers, portalCan, auth } = usePageProps<ShowProps>();
     const canEdit = auth.permissions.includes('crm.edit');
     const canDelete = auth.permissions.includes('crm.delete');
 
@@ -188,6 +191,18 @@ export default function Show() {
                         )}
                     </div>
 
+                    {/* Ügyfélportál-hozzáférés — csak megrendelőnek van értelme */}
+                    {(partner.is_client || portalUsers.length > 0) && (
+                        <PortalAccessCard
+                            partnerId={partner.id}
+                            partnerName={partner.name}
+                            contactName={partner.contact_name}
+                            email={partner.email}
+                            users={portalUsers}
+                            can={portalCan}
+                        />
+                    )}
+
                     {partner.note && (
                         <div className="o-card p-5">
                             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-ink-soft">
@@ -242,6 +257,14 @@ export default function Show() {
                                         <span className="hidden text-xs text-ink-faint lg:block">
                                             {fmtDate(p.starts_on)}
                                         </span>
+                                        {p.client_visible && (
+                                            <span
+                                                className="chip chip-green shrink-0"
+                                                title="Az ügyfélportálon látható"
+                                            >
+                                                Portálon
+                                            </span>
+                                        )}
                                         <StatusChip status={p.status} />
                                     </Link>
                                 ))}

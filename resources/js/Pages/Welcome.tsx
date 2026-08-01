@@ -56,7 +56,7 @@ export default function Welcome({ appName, canResetPassword, status }: WelcomePr
                             {appName}
                         </h1>
                         <p className="mt-1 text-xs font-semibold uppercase tracking-[0.35em] text-accent">
-                            Építőipar
+                            AcuWall
                         </p>
                     </div>
 
@@ -121,7 +121,7 @@ export default function Welcome({ appName, canResetPassword, status }: WelcomePr
                     </div>
 
                     <p className="mt-6 text-center text-xs text-ink-faint">
-                        © {new Date().getFullYear()} {appName} · Építőipari projektvezető rendszer
+                        © {new Date().getFullYear()} {appName} · AcuWall projektvezető rendszer
                     </p>
                 </div>
             </div>

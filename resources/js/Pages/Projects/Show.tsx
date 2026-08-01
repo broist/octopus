@@ -20,8 +20,10 @@ import Gantt from '@/Pages/Projects/Partials/Gantt';
 import { usePageProps } from '@/hooks/usePageProps';
 import { fmtBytes, fmtDate, fmtDateTime } from '@/lib/format';
 import { CATEGORY_LABELS, fileIcon } from '@/lib/documents';
+import ClientPortalPanel from '@/Pages/Projects/Partials/ClientPortalPanel';
 import type {
     ActivityItem,
+    ClientSharing,
     PhaseItem,
     PhaseTemplateInfo,
     ProjectDetail,
@@ -36,10 +38,18 @@ interface ShowProps extends Record<string, unknown> {
     subprojects: SubprojectItem[];
     activities: ActivityItem[];
     documents: ProjectDocumentRow[];
+    clientSharing: ClientSharing;
     types: Record<string, string>;
 }
 
-type Tab = 'attekintes' | 'utemterv' | 'eroforrasok' | 'penzugy' | 'dokumentumok' | 'naplo';
+type Tab =
+    | 'attekintes'
+    | 'utemterv'
+    | 'eroforrasok'
+    | 'penzugy'
+    | 'dokumentumok'
+    | 'ugyfelportal'
+    | 'naplo';
 
 const TABS: { key: Tab; label: string }[] = [
     { key: 'attekintes', label: 'Áttekintés' },
@@ -47,6 +57,7 @@ const TABS: { key: Tab; label: string }[] = [
     { key: 'eroforrasok', label: 'Erőforrások' },
     { key: 'penzugy', label: 'Költségvetés' },
     { key: 'dokumentumok', label: 'Dokumentumok' },
+    { key: 'ugyfelportal', label: 'Ügyfélportál' },
     { key: 'naplo', label: 'Napló' },
 ];
 
@@ -80,8 +91,17 @@ function ComingSoon({ title, note }: { title: string; note: string }) {
 }
 
 export default function Show() {
-    const { project, phases, phaseTemplates, subprojects, activities, documents, types, auth } =
-        usePageProps<ShowProps>();
+    const {
+        project,
+        phases,
+        phaseTemplates,
+        subprojects,
+        activities,
+        documents,
+        clientSharing,
+        types,
+        auth,
+    } = usePageProps<ShowProps>();
     const [tab, setTab] = useState<Tab>('attekintes');
 
     const canEdit = auth.permissions.includes('projects.edit');
@@ -411,6 +431,15 @@ export default function Show() {
                         </div>
                     )}
                 </section>
+            )}
+
+            {tab === 'ugyfelportal' && (
+                <ClientPortalPanel
+                    projectId={project.id}
+                    sharing={clientSharing}
+                    documents={documents}
+                    canEdit={canEdit}
+                />
             )}
 
             {tab === 'naplo' && (

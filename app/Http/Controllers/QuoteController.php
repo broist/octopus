@@ -127,6 +127,26 @@ class QuoteController extends Controller
             'totals' => QuoteCalculator::project($quote->data ?? []),
             'tab' => $tab,
             'folders' => $this->folderOptions($user),
+            // Ügyfélportál: projekthez kötés + megosztás állapota.
+            'clientSharing' => [
+                'project_id' => $quote->project_id,
+                'visible' => (bool) $quote->client_visible,
+                'response' => $quote->client_response,
+                'response_label' => Quote::CLIENT_RESPONSES[$quote->client_response] ?? null,
+                'response_note' => $quote->client_response_note,
+                'responded_at' => $quote->client_responded_at?->toIso8601String(),
+            ],
+            'projects' => \App\Models\Project::query()
+                ->with('client:id,name')
+                ->orderByDesc('updated_at')
+                ->get(['id', 'code', 'name', 'client_id'])
+                ->map(fn ($p) => [
+                    'id' => $p->id,
+                    'code' => $p->code,
+                    'name' => $p->name,
+                    'client_name' => $p->client?->name,
+                ])
+                ->values(),
             'can' => [
                 'edit' => $user->can('ajanlatok.edit'),
                 'delete' => $user->can('ajanlatok.delete'),
@@ -172,6 +192,15 @@ class QuoteController extends Controller
         $quote->data = $payload;
         $quote->approved_at = now();
         $quote->approved_by = $request->user()->email;
+
+        // Új verzió = új ajánlat az ügyfélnek: a korábbi visszajelzése nem
+        // vonatkozik rá, ezért a portálon újra nyilatkozhat.
+        if ($newVersion !== $quote->version) {
+            $quote->client_response = null;
+            $quote->client_response_note = null;
+            $quote->client_responded_at = null;
+        }
+
         $quote->syncFromData();
         $quote->save();
 

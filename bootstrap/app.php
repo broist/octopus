@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureClientPortalUser;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RedirectExternalUsers;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -30,6 +32,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            // A külső (ügyfél-) fiókokat a portálon tartja.
+            RedirectExternalUsers::class,
         ]);
 
         // A lead webhookot külső rendszer (a weboldal űrlapja) hívja —
@@ -39,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'portal' => EnsureClientPortalUser::class,
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,

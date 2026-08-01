@@ -9,7 +9,7 @@ namespace App\Support;
 class Subcontractors
 {
     /**
-     * Szakmák / szakterületek — a spec példái + a gyakori építőipari szakmák.
+     * Szakmák / szakterületek — a spec példái + a gyakori kivitelezői szakmák.
      * A partner.trade ezekből az egyik (szabadszöveg „egyeb" fallback).
      *
      * @return array<string, string>

@@ -31,7 +31,15 @@ class Document extends Model
         'partner_id',
         'description',
         'uploaded_by',
+        'client_visible',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'client_visible' => 'boolean',
+        ];
+    }
 
     public function versions(): HasMany
     {

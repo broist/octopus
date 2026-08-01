@@ -40,7 +40,7 @@ export default function GuestLayout({
                 </div>
 
                 <p className="mt-6 text-center text-xs text-ink-faint">
-                    Octopus · Építőipari projektvezető rendszer
+                    Octopus · AcuWall projektvezető rendszer
                 </p>
             </div>
         </div>

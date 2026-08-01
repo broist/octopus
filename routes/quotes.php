@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientSharingController;
 use App\Http\Controllers\QuoteController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,10 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/ajanlatok/{quote}/approve', [QuoteController::class, 'approve'])
         ->whereNumber('quote')->middleware('can:ajanlatok.edit')->name('ajanlatok.approve');
+
+    // Ügyfélportál: projekthez kötés + megosztás a megrendelővel
+    Route::put('/ajanlatok/{quote}/ugyfel-megosztas', [ClientSharingController::class, 'quote'])
+        ->whereNumber('quote')->middleware('can:ajanlatok.edit')->name('ajanlatok.client-sharing');
 
     Route::post('/ajanlatok/{quote}/pdf', [QuoteController::class, 'savePdf'])
         ->whereNumber('quote')->middleware('can:ajanlatok.view')->name('ajanlatok.pdf');

@@ -1,7 +1,7 @@
 {
-    "name": "Octopus – Építőipari projektvezető",
+    "name": "Octopus – AcuWall projektvezető",
     "short_name": "Octopus",
-    "description": "Projektvezető és rendszerező rendszer építőipari cégeknek.",
+    "description": "Projektvezető és rendszerező rendszer az AcuWall csapatának és megrendelőinek.",
     "lang": "hu",
     "start_url": "/",
     "scope": "/",
