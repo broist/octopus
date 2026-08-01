@@ -21,11 +21,11 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 class TaskController extends Controller
 {
     /**
-     * Az „Aktuális" nézetben a lezárt feladatok ennyi napig maradnak még
-     * láthatók (a kanban Kész oszlopa se legyen üres), utána az Archívumba
-     * kerülnek — ott dátum- és szövegkereséssel bármikor előhúzhatók.
+     * Alapból a lezárt feladatok nincsenek szem előtt — a felhasználó az
+     * Állapot szűrőben bármikor visszakapcsolhatja őket (vagy elrejthet
+     * továbbiakat), a választás az URL-ben marad.
      */
-    private const RECENT_DONE_DAYS = 7;
+    private const DEFAULT_HIDDEN_STATUSES = 'kesz';
 
     public function index(Request $request): Response
     {
@@ -37,17 +37,22 @@ class TaskController extends Controller
         $scope = $request->string('scope')->toString(); // '' | 'project' | 'internal'
         $mine = $request->boolean('mine');
 
-        // Állapot: aktuális (alap) | archívum (lezárt) | összes.
-        $state = $request->string('state')->toString();
-        if (! in_array($state, ['active', 'done', 'all'], true)) {
-            $state = 'active';
-        }
-        // Archívum-szűkítés lezárás dátumára (csak a 'done' nézetben).
+        // Elrejtett állapotok (vesszős lista). A paraméter hiánya = alapbeállítás,
+        // az üres string viszont azt jelenti: a felhasználó mindent látni akar.
+        $hiddenParam = $request->has('hidden')
+            ? $request->string('hidden')->toString()
+            : self::DEFAULT_HIDDEN_STATUSES;
+        $hidden = array_values(array_intersect(
+            array_filter(array_map('trim', explode(',', $hiddenParam))),
+            array_keys(Task::STATUSES),
+        ));
+
+        // Szűkítés a lezárás dátumára (csak akkor van értelme, ha a Kész látszik).
         $doneFrom = $request->string('done_from')->toString();
         $doneTo = $request->string('done_to')->toString();
 
-        // A hatókör (scope) és az állapot (state) kivételével minden szűrő közös —
-        // a lista és mindkét szegmens-váltó darabszámai is ezt használják.
+        // A hatókör és az állapot-elrejtés kivételével minden szűrő közös — a
+        // lista és a darabszámok is ezt használják.
         $applyFilters = fn ($q) => $q
             ->when($mine, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->where('users.id', $request->user()->id)))
             ->when($assigneeId > 0, fn ($q) => $q->whereHas('assignees', fn ($a) => $a->where('users.id', $assigneeId)))
@@ -60,33 +65,31 @@ class TaskController extends Controller
             ->when($scope === 'project', fn ($q) => $q->whereNotNull('project_id'))
             ->when($scope === 'internal', fn ($q) => $q->whereNull('project_id'));
 
-        // Az „aktuális" a nyitott feladatok + a frissen lezártak; az archívum a
-        // többi kész feladat, opcionális lezárási dátumszűréssel.
-        $applyState = fn ($q, string $s) => match ($s) {
-            'done' => $q->where('status', 'kesz')
-                ->when($doneFrom !== '', fn ($q) => $q->whereDate('completed_at', '>=', $doneFrom))
-                ->when($doneTo !== '', fn ($q) => $q->whereDate('completed_at', '<=', $doneTo)),
-            'all' => $q,
-            default => $q->where(fn ($q) => $q
-                ->where('status', '!=', 'kesz')
-                ->orWhere('completed_at', '>=', now()->subDays(self::RECENT_DONE_DAYS))),
-        };
+        // Elrejtett állapotok + lezárási dátumtartomány. A dátumszűrőt csak akkor
+        // engedjük érvényre jutni, ha a Kész látszik: elrejtett Kész mellett a
+        // completed_at minden feladatnál üres, azaz mindent kiszűrne.
+        $doneRangeApplies = ! in_array('kesz', $hidden, true);
+        $applyState = fn ($q) => $q
+            ->when($hidden !== [], fn ($q) => $q->whereNotIn('status', $hidden))
+            ->when($doneRangeApplies && $doneFrom !== '', fn ($q) => $q->whereDate('completed_at', '>=', $doneFrom))
+            ->when($doneRangeApplies && $doneTo !== '', fn ($q) => $q->whereDate('completed_at', '<=', $doneTo));
 
         // Hatókör-darabszámok (a scope szűrő nélkül) — a szegmens-váltóhoz.
         $scopeCounts = [
-            'all' => $applyState($applyFilters(Task::query()), $state)->count(),
-            'project' => $applyState($applyFilters(Task::query()), $state)->whereNotNull('project_id')->count(),
-            'internal' => $applyState($applyFilters(Task::query()), $state)->whereNull('project_id')->count(),
+            'all' => $applyState($applyFilters(Task::query()))->count(),
+            'project' => $applyState($applyFilters(Task::query()))->whereNotNull('project_id')->count(),
+            'internal' => $applyState($applyFilters(Task::query()))->whereNull('project_id')->count(),
         ];
 
-        // Állapot-darabszámok (a state szűrő nélkül) — az Aktuális/Archívum váltóhoz.
-        $stateCounts = [
-            'active' => $applyState($applyScope($applyFilters(Task::query())), 'active')->count(),
-            'done' => $applyScope($applyFilters(Task::query()))->where('status', 'kesz')->count(),
-            'all' => $applyScope($applyFilters(Task::query()))->count(),
-        ];
+        // Állapotonkénti darabszám (az elrejtés nélkül) — az Állapot szűrőben
+        // így az is látszik, hány feladat van az éppen elrejtett állapotokban.
+        $statusCounts = [];
+        foreach (array_keys(Task::STATUSES) as $status) {
+            $statusCounts[$status] = $applyScope($applyFilters(Task::query()))
+                ->where('status', $status)->count();
+        }
 
-        $tasks = $applyState($applyScope($applyFilters(Task::query())), $state)
+        $tasks = $applyState($applyScope($applyFilters(Task::query())))
             ->with(['project:id,code,name', 'assignees:id,name', 'creator:id,name', 'attachments'])
             ->withCount(['comments as comments_count' => fn ($q) => $q->where('kind', TaskComment::KIND_COMMENT)])
             ->orderByRaw("case priority when 'magas' then 0 when 'kozepes' then 1 else 2 end")
@@ -129,13 +132,12 @@ class TaskController extends Controller
                 'assignee' => $assigneeId ?: null,
                 'scope' => $scope,
                 'mine' => $mine,
-                'state' => $state,
+                'hidden' => $hidden,
                 'done_from' => $doneFrom,
                 'done_to' => $doneTo,
             ],
             'scopeCounts' => $scopeCounts,
-            'stateCounts' => $stateCounts,
-            'recentDoneDays' => self::RECENT_DONE_DAYS,
+            'statusCounts' => $statusCounts,
             'statuses' => Task::STATUSES,
             'priorities' => Task::PRIORITIES,
             'users' => User::where('is_active', true)->where('is_external', false)

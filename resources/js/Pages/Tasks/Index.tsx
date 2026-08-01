@@ -2,16 +2,13 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import {
-    Archive,
     CalendarClock,
-    Columns3,
+    EyeOff,
     ImageIcon,
-    List,
     ListChecks,
     MessageSquare,
     Paperclip,
     Plus,
-    Search,
     Trash2,
     X,
 } from 'lucide-react';
@@ -19,6 +16,12 @@ import clsx from 'clsx';
 import AppLayout from '@/Layouts/AppLayout';
 import PageHeader from '@/Components/PageHeader';
 import TaskTimeline from './Partials/TaskTimeline';
+import TaskToolbar, {
+    EMPTY_FILTERS,
+    type SortKey,
+    type TaskFilterState,
+    type TaskScope,
+} from './Partials/TaskToolbar';
 import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
@@ -33,11 +36,6 @@ import type {
     TaskStatus,
 } from '@/types/models';
 
-type TaskScope = '' | 'project' | 'internal';
-
-/** Aktuális (nyitott + frissen lezárt) | Archívum (kész) | Összes. */
-type TaskState = 'active' | 'done' | 'all';
-
 interface IndexProps extends Record<string, unknown> {
     tasks: TaskItem[];
     filters: {
@@ -48,13 +46,13 @@ interface IndexProps extends Record<string, unknown> {
         assignee: number | null;
         scope: TaskScope;
         mine: boolean;
-        state: TaskState;
+        /** Az elrejtett állapotok — ezeket nem kéri a felhasználó. */
+        hidden: TaskStatus[];
         done_from: string;
         done_to: string;
     };
     scopeCounts: { all: number; project: number; internal: number };
-    stateCounts: { active: number; done: number; all: number };
-    recentDoneDays: number;
+    statusCounts: Record<string, number>;
     statuses: Record<string, string>;
     priorities: Record<string, string>;
     users: Option[];
@@ -73,24 +71,8 @@ const PRIORITY_CHIP: Record<TaskPriority, string> = {
 
 const STATUS_ORDER: TaskStatus[] = ['teendo', 'folyamatban', 'kesz'];
 
-type SortKey =
-    | 'due_asc'
-    | 'due_desc'
-    | 'name'
-    | 'assignee'
-    | 'project'
-    | 'created_desc'
-    | 'completed_desc';
-
-const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-    { value: 'due_asc', label: 'Határidő ↑ (legközelebbi elöl)' },
-    { value: 'due_desc', label: 'Határidő ↓ (legtávolabbi elöl)' },
-    { value: 'name', label: 'Név szerint (A→Z)' },
-    { value: 'assignee', label: 'Felelős szerint' },
-    { value: 'project', label: 'Projekt szerint' },
-    { value: 'created_desc', label: 'Legújabban létrehozott' },
-    { value: 'completed_desc', label: 'Legutóbb lezárt' },
-];
+/** A nézetválasztás (kanban/lista) felhasználónként megmarad. */
+const VIEW_STORAGE_KEY = 'octopus.tasks.view';
 
 function initials(name: string): string {
     return name
@@ -542,8 +524,7 @@ export default function Index() {
         tasks,
         filters,
         scopeCounts,
-        stateCounts,
-        recentDoneDays,
+        statusCounts,
         statuses,
         priorities,
         users,
@@ -555,22 +536,39 @@ export default function Index() {
     const canCreate = auth.permissions.includes('tasks.create');
     const canDelete = auth.permissions.includes('tasks.delete');
 
-    const [view, setView] = useState<'kanban' | 'list'>('list');
+    // A kanban az elsődleges nézet; a választás felhasználónként megmarad.
+    const [view, setView] = useState<'kanban' | 'list'>(
+        () => (localStorage.getItem(VIEW_STORAGE_KEY) as 'kanban' | 'list') || 'kanban',
+    );
     const [sort, setSort] = useState<SortKey>('due_asc');
     const [modal, setModal] = useState<{ task: TaskItem | null; status: TaskStatus } | null>(null);
     const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
 
-    const [search, setSearch] = useState(filters.search);
-    const [project, setProject] = useState(filters.project ? String(filters.project) : '');
-    const [priority, setPriority] = useState(filters.priority);
-    const [creator, setCreator] = useState(filters.creator ? String(filters.creator) : '');
-    const [assignee, setAssignee] = useState(filters.assignee ? String(filters.assignee) : '');
-    const [scope, setScope] = useState<TaskScope>(filters.scope);
-    const [mine, setMine] = useState(filters.mine);
-    const [state, setState] = useState<TaskState>(filters.state);
-    const [doneFrom, setDoneFrom] = useState(filters.done_from);
-    const [doneTo, setDoneTo] = useState(filters.done_to);
+    const [f, setF] = useState<TaskFilterState>({
+        search: filters.search,
+        project: filters.project ? String(filters.project) : '',
+        priority: filters.priority,
+        creator: filters.creator ? String(filters.creator) : '',
+        assignee: filters.assignee ? String(filters.assignee) : '',
+        scope: filters.scope,
+        mine: filters.mine,
+        hidden: filters.hidden,
+        doneFrom: filters.done_from,
+        doneTo: filters.done_to,
+    });
+    const patch = (p: Partial<TaskFilterState>) => setF((s) => ({ ...s, ...p }));
     const firstRender = useRef(true);
+
+    const changeView = (v: 'kanban' | 'list') => {
+        setView(v);
+        localStorage.setItem(VIEW_STORAGE_KEY, v);
+    };
+
+    const showDone = !f.hidden.includes('kesz');
+    const visibleStatuses = STATUS_ORDER.filter((s) => !f.hidden.includes(s));
+    const hiddenStatuses = STATUS_ORDER.filter((s) => f.hidden.includes(s));
+
+    const resetFilters = () => setF({ ...EMPTY_FILTERS, hidden: [] });
 
     useEffect(() => {
         if (firstRender.current) {
@@ -581,53 +579,26 @@ export default function Index() {
             router.get(
                 route('tasks.index'),
                 {
-                    search: search || undefined,
+                    search: f.search || undefined,
                     // Belső hatókörben a projektszűrő nem értelmezett.
-                    project: scope === 'internal' ? undefined : project || undefined,
-                    priority: priority || undefined,
-                    creator: creator || undefined,
-                    assignee: assignee || undefined,
-                    scope: scope || undefined,
-                    mine: mine ? 1 : undefined,
-                    // Az 'active' az alapértelmezés, azt nem tesszük az URL-be.
-                    state: state === 'active' ? undefined : state,
-                    // A lezárási dátumszűrő csak az archívumban értelmezett.
-                    done_from: state === 'done' ? doneFrom || undefined : undefined,
-                    done_to: state === 'done' ? doneTo || undefined : undefined,
+                    project: f.scope === 'internal' ? undefined : f.project || undefined,
+                    priority: f.priority || undefined,
+                    creator: f.creator || undefined,
+                    assignee: f.assignee || undefined,
+                    scope: f.scope || undefined,
+                    mine: f.mine ? 1 : undefined,
+                    // Mindig kiírjuk (üresen is), különben a szerver az
+                    // alapértelmezést (Kész elrejtve) állítaná vissza.
+                    hidden: f.hidden.join(','),
+                    // A lezárási dátumszűrőnek csak látható Kész mellett van értelme.
+                    done_from: showDone ? f.doneFrom || undefined : undefined,
+                    done_to: showDone ? f.doneTo || undefined : undefined,
                 },
                 { preserveState: true, replace: true },
             );
         }, 300);
         return () => clearTimeout(t);
-    }, [search, project, priority, creator, assignee, scope, mine, state, doneFrom, doneTo]);
-
-    // Az archívumban a legutóbb lezárt legyen elöl, visszaváltáskor a határidő.
-    const switchState = (next: TaskState) => {
-        setState(next);
-        setSort(next === 'done' ? 'completed_desc' : 'due_asc');
-    };
-
-    const SCOPE_TABS: { value: TaskScope; label: string; count: number }[] = [
-        { value: '', label: 'Összes', count: scopeCounts.all },
-        { value: 'project', label: 'Projektfeladatok', count: scopeCounts.project },
-        { value: 'internal', label: 'Belső feladatok', count: scopeCounts.internal },
-    ];
-
-    const STATE_TABS: { value: TaskState; label: string; count: number; title: string }[] = [
-        {
-            value: 'active',
-            label: 'Aktuális',
-            count: stateCounts.active,
-            title: `Nyitott feladatok + az utóbbi ${recentDoneDays} napban lezártak`,
-        },
-        {
-            value: 'done',
-            label: 'Archívum',
-            count: stateCounts.done,
-            title: 'Lezárt (kész) feladatok — kereshetően',
-        },
-        { value: 'all', label: 'Összes', count: stateCounts.all, title: 'Minden feladat' },
-    ];
+    }, [f]);
 
     const sortedTasks = useMemo(() => {
         const copy = [...tasks];
@@ -676,20 +647,21 @@ export default function Index() {
     );
     const hasFilters = hasOtherFilters || !!filters.scope;
 
+    // Hány feladat esik az éppen elrejtett állapotokba — ha csak azok miatt
+    // üres a nézet, azt írjuk ki, ne az „első feladat" szöveget.
+    const hiddenTaskCount = hiddenStatuses.reduce((sum, s) => sum + (statusCounts[s] ?? 0), 0);
+
     const emptyStateText = (() => {
-        if (state === 'done') {
-            return 'A megadott feltételekkel nincs kész feladat az archívumban.';
+        if (hiddenTaskCount > 0 && !hasOtherFilters) {
+            return `Nincs látható feladat — ${hiddenTaskCount} feladat az elrejtett állapotokban van. Az Állapot szűrőben visszakapcsolhatja őket.`;
         }
-        if (state === 'active' && stateCounts.done > 0 && !hasOtherFilters) {
-            return `Minden aktuális feladat elkészült — a lezártak (${stateCounts.done}) az Archívumban vannak.`;
-        }
-        if (scope === 'internal' && !hasOtherFilters) {
+        if (filters.scope === 'internal' && !hasOtherFilters) {
             return 'Még nincs belső feladat. Vegyen fel egyet projekt nélkül — csak a cégen belüli teendőkhöz.';
         }
         if (hasFilters) {
             return 'A szűrésnek megfelelő feladat nincs — módosítsa a feltételeket.';
         }
-        return 'Hozza létre az első feladatot, és kövesse listán vagy kanban táblán.';
+        return 'Hozza létre az első feladatot, és kövesse kanban táblán vagy listán.';
     })();
 
     return (
@@ -712,214 +684,41 @@ export default function Index() {
                 }
             />
 
-            {/* Állapot-váltó: aktuális / archívum / összes */}
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-                <div className="inline-flex rounded-md border border-line bg-white p-0.5">
-                    {STATE_TABS.map((tab) => (
-                        <button
-                            key={tab.value}
-                            onClick={() => switchState(tab.value)}
-                            title={tab.title}
-                            className={clsx(
-                                'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition',
-                                state === tab.value
-                                    ? 'bg-sidebar text-white'
-                                    : 'text-ink-soft hover:text-ink',
-                            )}
-                        >
-                            {tab.value === 'done' && <Archive size={14} />}
-                            {tab.label}
-                            <span
-                                className={clsx(
-                                    'rounded-sm px-1.5 py-0.5 text-[11px]',
-                                    state === tab.value ? 'bg-white/20 text-white' : 'bg-cream text-ink-faint',
-                                )}
-                            >
-                                {tab.count}
-                            </span>
-                        </button>
-                    ))}
-                </div>
-
-                {state === 'active' && (
-                    <span className="text-xs text-ink-faint">
-                        A lezárt feladatok {recentDoneDays} nap után az Archívumba kerülnek.
-                    </span>
-                )}
-
-                {/* Archívum: szűkítés a lezárás dátumára */}
-                {state === 'done' && (
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
-                        <span>Lezárva:</span>
-                        <input
-                            type="date"
-                            value={doneFrom}
-                            onChange={(e) => setDoneFrom(e.target.value)}
-                            className="rounded-md border-line bg-white py-1 text-xs focus:border-accent focus:ring-accent/30"
-                        />
-                        <span>–</span>
-                        <input
-                            type="date"
-                            value={doneTo}
-                            onChange={(e) => setDoneTo(e.target.value)}
-                            className="rounded-md border-line bg-white py-1 text-xs focus:border-accent focus:ring-accent/30"
-                        />
-                        {(doneFrom || doneTo) && (
-                            <button
-                                onClick={() => {
-                                    setDoneFrom('');
-                                    setDoneTo('');
-                                }}
-                                className="rounded px-1.5 py-0.5 text-ink-faint hover:text-coral"
-                            >
-                                Törlés
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* Hatókör-váltó: összes / projektfeladatok / belső feladatok */}
-            <div className="mb-4 inline-flex rounded-md border border-line bg-white p-0.5">
-                {SCOPE_TABS.map((tab) => (
-                    <button
-                        key={tab.value || 'all'}
-                        onClick={() => setScope(tab.value)}
-                        className={clsx(
-                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium transition',
-                            scope === tab.value ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                        )}
-                    >
-                        {tab.label}
-                        <span
-                            className={clsx(
-                                'rounded-sm px-1.5 py-0.5 text-[11px]',
-                                scope === tab.value ? 'bg-white/20 text-white' : 'bg-cream text-ink-faint',
-                            )}
-                        >
-                            {tab.count}
-                        </span>
-                    </button>
-                ))}
-            </div>
-
-            {/* Szűrők + nézetváltó */}
-            <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
-                <div className="relative flex-1 lg:max-w-xs">
-                    <Search
-                        size={16}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
-                    />
-                    <input
-                        type="search"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Keresés feladat neve szerint…"
-                        className="w-full rounded-md border-line bg-white py-2 pl-9 pr-3 text-sm focus:border-accent focus:ring-accent/30"
-                    />
-                </div>
-
-                {scope !== 'internal' && (
-                    <select value={project} onChange={(e) => setProject(e.target.value)} className={`${selectClass} lg:w-48`}>
-                        <option value="">Minden projekt</option>
-                        {projects.map((p) => (
-                            <option key={p.id} value={p.id}>
-                                {p.label}
-                            </option>
-                        ))}
-                    </select>
-                )}
-
-                <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={`${selectClass} lg:w-44`}>
-                    <option value="">Minden felelős</option>
-                    {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                            {u.name}
-                        </option>
-                    ))}
-                </select>
-
-                <select value={priority} onChange={(e) => setPriority(e.target.value)} className={`${selectClass} lg:w-36`}>
-                    <option value="">Minden prioritás</option>
-                    {Object.entries(priorities).map(([v, l]) => (
-                        <option key={v} value={v}>
-                            {l}
-                        </option>
-                    ))}
-                </select>
-
-                <select value={creator} onChange={(e) => setCreator(e.target.value)} className={`${selectClass} lg:w-44`}>
-                    <option value="">Minden létrehozó</option>
-                    {creators.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {c.name}
-                        </option>
-                    ))}
-                </select>
-
-                <label className="flex items-center gap-2 text-sm text-ink-soft">
-                    <input
-                        type="checkbox"
-                        checked={mine}
-                        onChange={(e) => setMine(e.target.checked)}
-                        className="rounded-sm border-line text-accent focus:ring-accent/40"
-                    />
-                    Csak a sajátjaim
-                </label>
-
-                <div className="ml-auto flex items-center gap-2">
-                    {view === 'list' && (
-                        <select
-                            value={sort}
-                            onChange={(e) => setSort(e.target.value as SortKey)}
-                            className={`${selectClass} lg:w-56`}
-                            title="Rendezés"
-                        >
-                            {SORT_OPTIONS.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                    {o.label}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    <div className="flex rounded-md border border-line bg-white p-0.5">
-                        <button
-                            onClick={() => setView('list')}
-                            className={clsx(
-                                'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium',
-                                view === 'list' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                            )}
-                        >
-                            <List size={14} />
-                            Lista
-                        </button>
-                        <button
-                            onClick={() => setView('kanban')}
-                            className={clsx(
-                                'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium',
-                                view === 'kanban' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                            )}
-                        >
-                            <Columns3 size={14} />
-                            Kanban
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <TaskToolbar
+                value={f}
+                onChange={patch}
+                onReset={resetFilters}
+                statuses={statuses}
+                priorities={priorities}
+                users={users}
+                creators={creators}
+                projects={projects}
+                scopeCounts={scopeCounts}
+                statusCounts={statusCounts}
+                view={view}
+                onViewChange={changeView}
+                sort={sort}
+                onSortChange={setSort}
+            />
 
             {tasks.length === 0 ? (
                 <div className="o-card flex flex-col items-center px-6 py-16 text-center">
                     <span className="flex h-14 w-14 items-center justify-center rounded-lg bg-accent-50 text-accent">
                         <ListChecks size={26} />
                     </span>
-                    <h2 className="mt-4 text-lg font-semibold text-sidebar">
-                        {state === 'done' ? 'Nincs lezárt feladat' : 'Nincs feladat'}
-                    </h2>
+                    <h2 className="mt-4 text-lg font-semibold text-sidebar">Nincs látható feladat</h2>
                     <p className="mt-1 max-w-sm text-sm text-ink-soft">{emptyStateText}</p>
                 </div>
             ) : view === 'kanban' ? (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {STATUS_ORDER.map((status) => {
+                <div
+                    className={clsx(
+                        'grid grid-cols-1 gap-4',
+                        visibleStatuses.length === 1 && 'md:grid-cols-1',
+                        visibleStatuses.length === 2 && 'md:grid-cols-2',
+                        visibleStatuses.length >= 3 && 'md:grid-cols-3',
+                    )}
+                >
+                    {visibleStatuses.map((status) => {
                         const column = tasks.filter((t) => t.status === status);
                         return (
                             <div
@@ -938,11 +737,6 @@ export default function Index() {
                                 <div className="mb-3 flex items-center justify-between px-1">
                                     <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
                                         {statuses[status]}
-                                        {status === 'kesz' && state === 'active' && (
-                                            <span className="ml-1.5 font-normal normal-case text-ink-faint">
-                                                (utóbbi {recentDoneDays} nap)
-                                            </span>
-                                        )}
                                     </h2>
                                     <span className="rounded-sm bg-white px-1.5 py-0.5 text-xs font-medium text-ink-faint">
                                         {column.length}
@@ -957,31 +751,47 @@ export default function Index() {
                                             onOpen={() => setModal({ task, status })}
                                         />
                                     ))}
-                                    {/* A Kész oszlop nem hízik a végtelenségig: itt csak a
-                                        frissen lezártak vannak, a többi az Archívumban. */}
-                                    {status === 'kesz' && state === 'active' ? (
+                                    {canCreate && (
                                         <button
-                                            onClick={() => switchState('done')}
+                                            onClick={() => setModal({ task: null, status })}
                                             className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-line py-2 text-xs text-ink-faint transition hover:border-accent/40 hover:text-accent"
                                         >
-                                            <Archive size={13} />
-                                            Korábban lezártak ({stateCounts.done})
+                                            <Plus size={13} />
+                                            Feladat ide
                                         </button>
-                                    ) : (
-                                        canCreate && (
-                                            <button
-                                                onClick={() => setModal({ task: null, status })}
-                                                className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-line py-2 text-xs text-ink-faint transition hover:border-accent/40 hover:text-accent"
-                                            >
-                                                <Plus size={13} />
-                                                Feladat ide
-                                            </button>
-                                        )
                                     )}
                                 </div>
                             </div>
                         );
                     })}
+
+                    {/* Elrejtett állapotok: keskeny ledobó sáv, hogy a húzással
+                        való státuszváltás (pl. lezárás) elrejtve is működjön. */}
+                    {hiddenStatuses.length > 0 && (
+                        <div className="flex gap-2 md:col-span-full">
+                            {hiddenStatuses.map((status) => (
+                                <div
+                                    key={status}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        setDragOver(status);
+                                    }}
+                                    onDragLeave={() => setDragOver(null)}
+                                    onDrop={(e) => drop(status, e)}
+                                    className={clsx(
+                                        'flex flex-1 items-center justify-center gap-1.5 rounded-card border border-dashed py-2 text-xs transition',
+                                        dragOver === status
+                                            ? 'border-accent bg-accent-50 text-accent'
+                                            : 'border-line text-ink-faint',
+                                    )}
+                                >
+                                    <EyeOff size={13} />
+                                    {statuses[status]} (rejtve, {statusCounts[status] ?? 0}) — húzza
+                                    ide az áthelyezéshez
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             ) : (
                 /* Listás nézet — oszlopfejlécekkel */
@@ -997,9 +807,7 @@ export default function Index() {
                                 <th className="px-3 py-2.5 font-semibold">Határidő</th>
                                 <th className="px-3 py-2.5 font-semibold">Prioritás</th>
                                 <th className="px-3 py-2.5 font-semibold">Státusz</th>
-                                {state !== 'active' && (
-                                    <th className="px-3 py-2.5 font-semibold">Lezárva</th>
-                                )}
+                                {showDone && <th className="px-3 py-2.5 font-semibold">Lezárva</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -1088,7 +896,7 @@ export default function Index() {
                                             {statuses[task.status]}
                                         </span>
                                     </td>
-                                    {state !== 'active' && (
+                                    {showDone && (
                                         <td className="whitespace-nowrap px-3 py-2.5 text-xs text-ink-faint">
                                             {task.completed_at ? fmtDate(task.completed_at) : '–'}
                                         </td>
