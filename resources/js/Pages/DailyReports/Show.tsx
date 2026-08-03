@@ -155,7 +155,13 @@ export default function Show() {
                                         title={p.name}
                                     >
                                         {p.is_image ? (
-                                            <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                                            <img
+                                                src={p.thumb_url ?? p.url}
+                                                alt={p.name}
+                                                loading="lazy"
+                                                decoding="async"
+                                                className="h-full w-full object-cover"
+                                            />
                                         ) : (
                                             <span className="flex h-full w-full items-center justify-center bg-cream p-2 text-center text-[10px] text-ink-faint">
                                                 {p.name}

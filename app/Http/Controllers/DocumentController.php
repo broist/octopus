@@ -120,6 +120,10 @@ class DocumentController extends Controller
                     'download_version_id' => $v?->id,
                     'preview_version_id' => $v?->isPreviewable() ? $v->id : null,
                     'is_image' => str_starts_with((string) $v?->mime_type, 'image/'),
+                    // Van-e kicsinyített változat? A rácsnézet ilyenkor a
+                    // bélyegképet kéri le a (sokszor több megabájtos) eredeti
+                    // helyett — ez teszi mobilon is használhatóvá a listát.
+                    'has_thumb' => $v !== null && \App\Services\Thumbnails::supports($v->mime_type),
                     'project_code' => $d->project?->code,
                     'location' => $searchMode
                         ? ($d->folder?->pathString() ?? 'Fájlok')
@@ -390,6 +394,9 @@ class DocumentController extends Controller
                 'created_at' => $document->created_at->toIso8601String(),
                 'preview_version_id' => $current?->isPreviewable() ? $current->id : null,
                 'preview_mime' => $current?->mime_type,
+                // Képnél az adatlap is a kicsinyítettet mutatja (a teljes méret
+                // egy kattintásra elérhető) — több megabájtot spórol nézetenként.
+                'preview_has_thumb' => $current !== null && \App\Services\Thumbnails::supports($current->mime_type),
             ],
             'versions' => $document->versions->map(fn ($v) => [
                 'id' => $v->id,

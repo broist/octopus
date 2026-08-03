@@ -125,7 +125,7 @@ export default function Index() {
             />
 
             {/* Statisztika-csempék */}
-            <div className="mb-5 grid grid-cols-3 gap-3">
+            <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
                 <StatTile label="Összes alvállalkozó" value={stats.total} />
                 <StatTile label="Lejáró dokumentum" value={stats.expiring} tone="coral" />
                 <StatTile label="Szakma a listában" value={stats.trades} />

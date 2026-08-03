@@ -11,17 +11,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libicu-dev \
         libpng-dev \
         libjpeg-dev \
+        libwebp-dev \
         libfreetype6-dev \
         libonig-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # --- PHP extensions ---
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+# gd + webp: bélyegképek (App\Services\Thumbnails); a WebP jóval kisebb, mint
+# az azonos minőségű JPEG. exif: a telefonfotók elforgatását EXIF jelzi, enélkül
+# a bélyegkép az oldalára dőlne.
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_pgsql \
         pgsql \
         zip \
         gd \
+        exif \
         intl \
         bcmath \
         pcntl \

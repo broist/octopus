@@ -28,6 +28,8 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
  */
 class QaController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ServesThumbnails;
+
     // --- Hibalisták (fő nézet) -----------------------------------------------
 
     public function index(Request $request): Response
@@ -177,6 +179,21 @@ class QaController extends Controller
     {
         abort_unless($request->user()->can('qa.view'), 403);
 
+        // Bélyegkép, ha a kérés kicsinyítettet kér (?size=…).
+        if ($request->filled('size')) {
+            $thumb = $this->thumbnailResponse(
+                $request,
+                "defectphoto-{$photo->id}",
+                $photo->disk,
+                $photo->file_path,
+                $photo->mime_type,
+            );
+
+            if ($thumb !== null) {
+                return $thumb;
+            }
+        }
+
         $storage = Storage::disk($photo->disk);
         abort_unless($storage->exists($photo->file_path), 404, 'A fájl nem található.');
 
@@ -184,7 +201,9 @@ class QaController extends Controller
             return redirect()->away($storage->temporaryUrl($photo->file_path, now()->addMinutes(10)));
         }
 
-        return $storage->response($photo->file_path, $photo->original_filename);
+        return $storage->response($photo->file_path, $photo->original_filename, [
+            'Cache-Control' => 'private, max-age=604800',
+        ]);
     }
 
     // --- Munkavédelmi nyilvántartás -------------------------------------------
@@ -366,6 +385,10 @@ class QaController extends Controller
             'name' => $p->original_filename,
             'is_image' => $p->isImage(),
             'url' => route('qa.defect-photos.show', $p->id),
+            // A hibalista apró előnézeteihez a bélyegkép elég.
+            'thumb_url' => \App\Services\Thumbnails::supports($p->mime_type)
+                ? route('qa.defect-photos.show', ['photo' => $p->id, 'size' => 160])
+                : null,
         ])->values()->all();
     }
 

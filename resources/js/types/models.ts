@@ -144,6 +144,8 @@ export interface ExplorerFileRow {
     download_version_id: number | null;
     preview_version_id: number | null;
     is_image: boolean;
+    /** Kérhető-e kicsinyített bélyegkép (kép, amit a GD is ismer). */
+    has_thumb: boolean;
     project_code: string | null;
     location: string | null;
 }
@@ -734,6 +736,8 @@ export interface DailyReportPhoto {
     is_image: boolean;
     size_bytes: number;
     url: string;
+    /** Kicsinyített változat a galériához; null, ha nem készíthető. */
+    thumb_url: string | null;
     uploader_name: string | null;
 }
 
@@ -782,6 +786,8 @@ export interface QaPhoto {
     name: string;
     is_image: boolean;
     url: string;
+    /** Kicsinyített változat a listákhoz; null, ha nem készíthető. */
+    thumb_url: string | null;
 }
 
 export interface DefectItem {

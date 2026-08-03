@@ -52,7 +52,7 @@ export default function MoveDialog({
         <Dialog open={open} onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
             <div className="fixed inset-0 flex items-center justify-center p-4">
-                <DialogPanel className="o-card flex max-h-[80vh] w-full max-w-sm flex-col p-6">
+                <DialogPanel className="o-card flex max-h-[85dvh] w-full max-w-sm flex-col p-4 sm:p-6">
                     <DialogTitle className="text-base font-semibold text-sidebar">
                         Áthelyezés
                     </DialogTitle>

@@ -15,17 +15,53 @@
 @layer base {
     html {
         -webkit-text-size-adjust: 100%;
+        /* A gumiszalag-effektus a lapon belüli görgetőkre ne terjedjen ki. */
+        overscroll-behavior-y: none;
     }
 
     body {
         @apply bg-cream text-ink antialiased;
         font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+        /* Egyetlen túllógó elem se hozzon vízszintes görgetést az egész lapra. */
+        overflow-x: hidden;
     }
 
     /* Thin, warm scrollbars to match the material palette. */
     * {
         scrollbar-width: thin;
         scrollbar-color: rgba(33, 56, 46, 0.25) transparent;
+    }
+
+    /* --- Érintés --- */
+    /* A dupla koppintásos nagyítás késleltetése nélkül reagáljanak a gombok. */
+    button,
+    a,
+    [role='button'],
+    label,
+    summary,
+    input,
+    select,
+    textarea {
+        touch-action: manipulation;
+    }
+
+    /* Az iOS Safari RÁNAGYÍT a lapra, ha 16 képpontnál kisebb betűs mezőbe
+       kattintanak — utána a felhasználó kézzel nagyíthat vissza. A mezők
+       telefonon ezért mindig legalább 16 képpontosak; a méret csak a beviteli
+       mezőkre vonatkozik, a felület többi része változatlan marad. */
+    @media (max-width: 767px) {
+        input:not([type='checkbox']):not([type='radio']),
+        select,
+        textarea {
+            font-size: 16px;
+        }
+    }
+
+    /* Görgethető tartalomban gördülékeny (momentumos) mozgás iOS-en. */
+    .overflow-x-auto,
+    .overflow-y-auto,
+    .overflow-auto {
+        -webkit-overflow-scrolling: touch;
     }
 }
 

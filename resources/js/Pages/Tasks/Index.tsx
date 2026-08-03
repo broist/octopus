@@ -182,8 +182,8 @@ function TaskModal({
     return (
         <Dialog open onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
-            <div className="fixed inset-0 flex items-center justify-center overflow-y-auto p-4">
-                <DialogPanel className={clsx('o-card my-8 w-full p-6', task ? 'max-w-2xl' : 'max-w-lg')}>
+            <div className="fixed inset-0 flex justify-center overflow-y-auto p-3 sm:p-4">
+                <DialogPanel className={clsx('o-card m-auto w-full p-4 sm:p-6', task ? 'max-w-2xl' : 'max-w-lg')}>
                     <DialogTitle className="text-lg font-semibold text-sidebar">
                         {task ? 'Feladat szerkesztése' : 'Új feladat'}
                     </DialogTitle>
@@ -217,7 +217,7 @@ function TaskModal({
                             />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                                 <InputLabel value="Státusz" />
                                 <select

@@ -30,7 +30,7 @@ fi
 # Ensure writable storage/cache dirs. a+rwX (X = dirs only) is needed because
 # one-off exec'd commands (migrate/seed) run as root while PHP-FPM runs as
 # www-data — root-created files must stay readable for FPM.
-mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
+mkdir -p storage/framework/{cache,sessions,views} storage/logs storage/app/thumbs bootstrap/cache
 chmod -R a+rwX storage bootstrap/cache || true
 
 echo "[octopus] Running database migrations..."

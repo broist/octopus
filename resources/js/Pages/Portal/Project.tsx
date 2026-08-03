@@ -375,7 +375,7 @@ export default function ProjectPage() {
                             <img
                                 src={lightbox.url}
                                 alt={lightbox.filename}
-                                className="max-h-[80vh] rounded-lg object-contain"
+                                className="max-h-[85dvh] rounded-lg object-contain"
                             />
                         )}
                     </DialogPanel>

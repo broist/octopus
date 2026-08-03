@@ -46,6 +46,36 @@ tar czf files-$(date +%F).tar.gz storage/app/documents
 `OCTOPUS_ADMIN_PASSWORD` az első indítás ELŐTT, valamint `APP_URL` a valós
 domainre állítva.
 
+**Frissítéskor kötelező az image újraépítése**, ha a `docker/` mappa változott.
+A bélyegképekhez a PHP-image `gd`-je **webp**- és **exif**-támogatással készül,
+az nginx időkorlátai és a `php.ini` feltöltési beállításai pedig szintén az
+image-ből / bind-mountból jönnek:
+
+```bash
+docker compose build app
+docker compose up -d --force-recreate app queue scheduler
+docker compose restart nginx     # az app újraindítása után a régi upstream IP miatt kell
+docker compose run --rm assets   # frontend újraépítés
+```
+
+## Képek és feltöltés (mobil)
+
+A rendszert telefonról is használják az építkezésen, ezért a képek külön
+kezelést kapnak:
+
+- **Bélyegképek** — `App\Services\Thumbnails` a `storage/app/thumbs` alatt
+  gyorsítótárazott, kicsinyített változatot készít (160 / 400 / 1200 képpontos
+  leghosszabb éllel, WebP-ben). A fájlkezelő listája és a fotógalériák ezt
+  töltik le az eredeti helyett — egy telefonfotó így néhány megabájt helyett
+  néhány tíz kilobájt. Az EXIF-forgatás is itt dől el, hogy az álló fotók ne
+  dőljenek az oldalukra. A tár **tiszta gyorsítótár**, bármikor üríthető:
+  `php artisan thumbs:clear` (a képek első megnyitáskor újraépülnek).
+- **Feltöltés előtti tömörítés** — a böngésző a képeket még a küldés előtt
+  legfeljebb 2560 képpontos élre kicsinyíti (`resources/js/lib/image.ts`).
+  A feltöltés-ablakban kikapcsolható, ha eredeti felbontás kell.
+- **Szakaszolt küldés** — a nagy feltöltés 15 fájlos / 80 MB-os csomagokra
+  bomlik, kettesével párhuzamosan megy, és hálózati hibánál újrapróbálkozik.
+
 ## Verziópolitika / biztonság
 
 A Laravel **11-es széria kifutott a biztonsági támogatásból**: a CVE-2026-48019

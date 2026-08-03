@@ -38,6 +38,16 @@ return [
             'throw' => false,
         ],
 
+        // Octopus: generated image thumbnails (App\Services\Thumbnails). Pure
+        // cache — safe to wipe, it regenerates from the source files on demand.
+        'thumbs' => [
+            'driver' => 'local',
+            'root' => storage_path('app/thumbs'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => false,
+        ],
+
         // Octopus: large plan/drawing files on S3-compatible storage (presigned URLs).
         // When configured (key set), 'terv' + 'foto' categories and any upload
         // above min_upload_mb are routed here automatically.

@@ -184,7 +184,7 @@ export default function Index() {
                                     <div className="mt-2 flex gap-1.5">
                                         {d.photos.slice(0, 5).map((p) => (
                                             <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="h-12 w-12 overflow-hidden rounded border border-line">
-                                                {p.is_image ? <img src={p.url} alt={p.name} className="h-full w-full object-cover" /> : null}
+                                                {p.is_image ? <img src={p.thumb_url ?? p.url} alt={p.name} loading="lazy" decoding="async" className="h-full w-full object-cover" /> : null}
                                             </a>
                                         ))}
                                     </div>

@@ -51,7 +51,7 @@ function NavLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void 
             href={route(item.route)}
             onClick={onNavigate}
             className={clsx(
-                'beam group flex items-center gap-3 px-3 py-2 text-sm font-medium',
+                'beam group flex items-center gap-3 px-3 py-2.5 text-sm font-medium lg:py-2',
                 active ? 'beam-active text-white' : 'text-white/70 hover:text-white',
             )}
         >
@@ -91,7 +91,7 @@ function NavGroupWithChildren({
                 type="button"
                 onClick={() => setOpen((o) => !o)}
                 className={clsx(
-                    'beam group flex w-full items-center gap-3 px-3 py-2 text-sm font-medium',
+                    'beam group flex w-full items-center gap-3 px-3 py-2.5 text-sm font-medium lg:py-2',
                     parentActive ? 'beam-active text-white' : 'text-white/70 hover:text-white',
                 )}
             >
@@ -123,7 +123,7 @@ function NavGroupWithChildren({
                                 href={childHref(child)}
                                 onClick={onNavigate}
                                 className={clsx(
-                                    'flex items-center gap-2.5 rounded-sm py-1.5 pl-3 pr-2 text-[13px]',
+                                    'flex items-center gap-2.5 rounded-sm py-2 pl-3 pr-2 text-[13px] lg:py-1.5',
                                     active
                                         ? 'bg-white/10 font-medium text-white'
                                         : 'text-white/55 hover:text-white',
@@ -153,7 +153,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     return (
         <div className="flex h-full flex-col bg-sidebar">
             {/* Brand */}
-            <div className="flex h-16 items-center border-b border-white/10 px-5">
+            <div className="flex h-14 shrink-0 items-center border-b border-white/10 px-5 sm:h-16">
                 <AppLogo light />
             </div>
 
@@ -189,7 +189,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 })}
             </nav>
 
-            <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/35">
+            <div className="shrink-0 border-t border-white/10 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 text-[11px] text-white/35">
                 © {new Date().getFullYear()} Octopus
             </div>
         </div>

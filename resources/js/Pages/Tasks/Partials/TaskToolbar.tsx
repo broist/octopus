@@ -333,7 +333,7 @@ export default function TaskToolbar({
                             </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <div>
                                 <p className="mb-1 text-xs font-medium text-ink-faint">Felelős</p>
                                 <select

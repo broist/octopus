@@ -16,8 +16,9 @@ import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
 import { usePageProps } from '@/hooks/usePageProps';
+import { useImageShrink } from '@/hooks/useImageShrink';
 import { fmtBytes, fmtDateTime } from '@/lib/format';
-import { CATEGORY_LABELS } from '@/lib/documents';
+import { CATEGORY_LABELS, thumbUrl } from '@/lib/documents';
 import { officeAppFor, openInAppLabel } from '@/Pages/Documents/Partials/office';
 import type { DocumentVersionRow, Option, ProjectOption } from '@/types/models';
 
@@ -37,6 +38,7 @@ interface ShowProps extends Record<string, unknown> {
         created_at: string;
         preview_version_id: number | null;
         preview_mime: string | null;
+        preview_has_thumb: boolean;
     };
     versions: DocumentVersionRow[];
     categories: Record<string, string>;
@@ -57,6 +59,7 @@ export default function Show() {
 
     const [editing, setEditing] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const { prepare, preparing } = useImageShrink();
 
     const metaForm = useForm({
         title: doc.title,
@@ -307,11 +310,26 @@ export default function Show() {
                                     title="Előnézet"
                                 />
                             ) : (
-                                <img
-                                    src={route('documents.versions.preview', doc.preview_version_id)}
-                                    alt={doc.title}
-                                    className="max-h-[70vh] w-full bg-cream object-contain"
-                                />
+                                <a
+                                    href={route('documents.versions.preview', doc.preview_version_id)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Megnyitás teljes méretben"
+                                >
+                                    <img
+                                        src={
+                                            doc.preview_has_thumb
+                                                ? thumbUrl(doc.preview_version_id, 1200)
+                                                : route(
+                                                      'documents.versions.preview',
+                                                      doc.preview_version_id,
+                                                  )
+                                        }
+                                        alt={doc.title}
+                                        decoding="async"
+                                        className="max-h-[70vh] w-full bg-cream object-contain"
+                                    />
+                                </a>
                             )}
                         </div>
                     ) : (
@@ -355,11 +373,22 @@ export default function Show() {
                         >
                             <input
                                 type="file"
-                                onChange={(e) =>
-                                    versionForm.setData('file', e.target.files?.[0] ?? null)
-                                }
+                                onChange={async (e) => {
+                                    const picked = e.target.files?.[0] ?? null;
+                                    if (!picked) {
+                                        versionForm.setData('file', null);
+
+                                        return;
+                                    }
+                                    // Képnél a küldés előtti kicsinyítés itt is nyer.
+                                    const [ready] = await prepare([picked]);
+                                    versionForm.setData('file', ready);
+                                }}
                                 className="block w-full cursor-pointer rounded-md border border-line bg-white text-xs text-ink-soft file:mr-2 file:cursor-pointer file:border-0 file:bg-accent file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
                             />
+                            {preparing && (
+                                <p className="mt-1 text-xs text-accent-700">Kép előkészítése…</p>
+                            )}
                             <InputError message={versionForm.errors.file} />
                             <TextInput
                                 value={versionForm.data.note}

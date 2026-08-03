@@ -59,7 +59,7 @@ export default function Index() {
                 subtitle="Saját dolgozók: végzettségek lejárattal, munkaidő-nyilvántartás és szabadságok. A fiókok és szerepkörök a Felhasználók modulban kezelhetők."
             />
 
-            <div className="mb-5 grid grid-cols-3 gap-3">
+            <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
                 <StatTile label="Aktív munkatárs" value={stats.total} />
                 <StatTile label="Ma távol" value={stats.on_leave} tone="amber" />
                 <StatTile label="Lejáró végzettség" value={stats.expiring} tone="coral" />

@@ -27,6 +27,8 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
  */
 class DailyReportController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ServesThumbnails;
+
     public function __construct(private readonly WeatherService $weather)
     {
     }
@@ -223,6 +225,22 @@ class DailyReportController extends Controller
     {
         abort_unless($request->user()->can('daily-reports.view'), 403);
 
+        // Bélyegkép, ha a kérés kicsinyítettet kér (?size=…): a napi jelentések
+        // fotógalériája mobilon így néhány tíz kilobájtból megjelenik.
+        if ($request->filled('size')) {
+            $thumb = $this->thumbnailResponse(
+                $request,
+                "reportphoto-{$photo->id}",
+                $photo->disk,
+                $photo->file_path,
+                $photo->mime_type,
+            );
+
+            if ($thumb !== null) {
+                return $thumb;
+            }
+        }
+
         $storage = Storage::disk($photo->disk);
         abort_unless($storage->exists($photo->file_path), 404, 'A fájl nem található.');
 
@@ -230,7 +248,9 @@ class DailyReportController extends Controller
             return redirect()->away($storage->temporaryUrl($photo->file_path, now()->addMinutes(10)));
         }
 
-        return $storage->response($photo->file_path, $photo->original_filename);
+        return $storage->response($photo->file_path, $photo->original_filename, [
+            'Cache-Control' => 'private, max-age=604800',
+        ]);
     }
 
     // --- Segédfüggvények ------------------------------------------------------
@@ -412,6 +432,10 @@ class DailyReportController extends Controller
                 'is_image' => $p->isImage(),
                 'size_bytes' => $p->size_bytes,
                 'url' => route('daily-reports.photos.show', $p->id),
+                // A galéria a bélyegképet tölti be; az eredeti csak nagyításkor.
+                'thumb_url' => \App\Services\Thumbnails::supports($p->mime_type)
+                    ? route('daily-reports.photos.show', ['photo' => $p->id, 'size' => 400])
+                    : null,
                 'uploader_name' => $p->uploader?->name,
             ])->values(),
         ];

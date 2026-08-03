@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ArrowDown, ArrowUp, EllipsisVertical, Folder as FolderIcon, Lock } from 'lucide-react';
 import clsx from 'clsx';
 import { fmtBytes, fmtDateTime } from '@/lib/format';
-import { fileIcon } from '@/lib/documents';
+import { fileIcon, thumbUrl } from '@/lib/documents';
 import {
     ICON_SIZE,
     type ExplorerItem,
@@ -195,13 +195,18 @@ export default function ItemView({
         }
 
         const row = item.row;
-        if (row.is_image && row.preview_version_id && size >= 30) {
+        // Bélyegkép, sosem az eredeti: egy telefonfotó több megabájt, a
+        // bélyegképe néhány tíz kilobájt.
+        if (row.is_image && row.has_thumb && row.preview_version_id) {
             return (
                 <img
-                    src={route('documents.versions.preview', row.preview_version_id)}
+                    src={thumbUrl(row.preview_version_id, Math.round(size * 1.25))}
                     alt=""
                     loading="lazy"
-                    className="rounded-[3px] border border-line object-cover"
+                    decoding="async"
+                    width={Math.round(size * 1.25)}
+                    height={size}
+                    className="rounded-[3px] border border-line bg-cream object-cover"
                     style={{ width: size * 1.25, height: size }}
                 />
             );

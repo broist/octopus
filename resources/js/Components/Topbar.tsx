@@ -37,7 +37,7 @@ function NotificationsMenu() {
                 )}
             </MenuButton>
 
-            <MenuItems className="absolute right-0 mt-2 w-80 origin-top-right rounded-xl border border-line bg-white p-1 shadow-lg focus:outline-none">
+            <MenuItems className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1.5rem))] origin-top-right rounded-xl border border-line bg-white p-1 shadow-lg focus:outline-none">
                 <div className="flex items-center justify-between px-3 py-2">
                     <span className="text-sm font-semibold text-ink">Értesítések</span>
                     {unread > 0 && (
@@ -112,7 +112,7 @@ export default function Topbar({ onOpenSidebar }: { onOpenSidebar: () => void })
     const canCreateProject = auth.permissions.includes('projects.create');
 
     return (
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-cream/85 px-4 backdrop-blur">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-cream/85 px-2 backdrop-blur sm:h-16 sm:gap-3 sm:px-4">
             {/* Mobile menu button */}
             <button
                 type="button"

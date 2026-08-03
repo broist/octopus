@@ -4,6 +4,7 @@ import { Camera, Trash2, X } from 'lucide-react';
 import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
+import { useImageShrink } from '@/hooks/useImageShrink';
 import type { DefectItem, Option, ProjectRef } from '@/types/models';
 
 interface DefectFormData {
@@ -67,6 +68,7 @@ export default function DefectModal({
         remove_photos: [],
     });
 
+    const { prepare, preparing } = useImageShrink();
     const keptPhotos = defect?.photos.filter((p) => !form.data.remove_photos.includes(p.id)) ?? [];
 
     const submit = (e: React.FormEvent) => {
@@ -83,8 +85,8 @@ export default function DefectModal({
     return (
         <Dialog open onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
-            <div className="fixed inset-0 flex items-center justify-center overflow-y-auto p-4">
-                <DialogPanel className="o-card my-8 w-full max-w-xl p-6">
+            <div className="fixed inset-0 flex justify-center overflow-y-auto p-3 sm:p-4">
+                <DialogPanel className="o-card m-auto w-full max-w-xl p-4 sm:p-6">
                     <DialogTitle className="text-lg font-semibold text-sidebar">
                         {defect ? 'Hiba szerkesztése' : 'Új hiba / hiányosság'}
                     </DialogTitle>
@@ -199,22 +201,31 @@ export default function DefectModal({
                                     accept="image/*"
                                     capture="environment"
                                     multiple
-                                    onChange={(e) => {
-                                        if (e.target.files?.length) {
-                                            form.setData('photos', [...form.data.photos, ...Array.from(e.target.files)]);
-                                        }
+                                    onChange={async (e) => {
+                                        const picked = Array.from(e.target.files ?? []);
                                         e.target.value = '';
+                                        if (picked.length === 0) return;
+
+                                        // Kicsinyítés még a küldés előtt.
+                                        const ready = await prepare(picked);
+                                        form.setData('photos', [...form.data.photos, ...ready]);
                                     }}
                                     className="hidden"
                                 />
                             </label>
+
+                            {preparing && (
+                                <p className="text-xs text-accent-700">
+                                    Fotók előkészítése… {preparing.done} / {preparing.total}
+                                </p>
+                            )}
 
                             {keptPhotos.length > 0 && (
                                 <div className="grid grid-cols-4 gap-2">
                                     {keptPhotos.map((p) => (
                                         <div key={p.id} className="relative aspect-square overflow-hidden rounded-lg border border-line">
                                             {p.is_image ? (
-                                                <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                                                <img src={p.thumb_url ?? p.url} alt={p.name} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                                             ) : (
                                                 <div className="flex h-full w-full items-center justify-center bg-cream text-[10px] text-ink-faint">
                                                     {p.name}

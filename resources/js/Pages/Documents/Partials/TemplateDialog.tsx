@@ -73,7 +73,7 @@ export default function TemplateDialog({
         <Dialog open={open} onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
             <div className="fixed inset-0 flex items-center justify-center p-4">
-                <DialogPanel className="o-card flex max-h-[85vh] w-full max-w-3xl flex-col p-0">
+                <DialogPanel className="o-card flex max-h-[85dvh] w-full max-w-3xl flex-col p-0">
                     <div className="border-b border-line px-6 py-4">
                         <DialogTitle className="text-base font-semibold text-sidebar">
                             Mappastruktúra sablonból

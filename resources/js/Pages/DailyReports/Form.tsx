@@ -7,6 +7,7 @@ import PageHeader from '@/Components/PageHeader';
 import InputLabel from '@/Components/ui/InputLabel';
 import InputError from '@/Components/ui/InputError';
 import { usePageProps } from '@/hooks/usePageProps';
+import { useImageShrink } from '@/hooks/useImageShrink';
 import { fmtBytes } from '@/lib/format';
 import type {
     DailyReportDetail,
@@ -76,6 +77,7 @@ export default function Form() {
         remove_photos: [],
     });
 
+    const { prepare, preparing } = useImageShrink();
     const selectedProject = projects.find((p) => String(p.id) === form.data.project_id);
     const keptPhotos = report?.photos.filter((p) => !form.data.remove_photos.includes(p.id)) ?? [];
 
@@ -102,10 +104,14 @@ export default function Form() {
             form.data.crews.filter((_, i) => i !== index),
         );
 
-    const addPhotos = (files: FileList | null) => {
-        if (files && files.length > 0) {
-            form.setData('photos', [...form.data.photos, ...Array.from(files)]);
-        }
+    const addPhotos = async (files: FileList | null) => {
+        if (!files || files.length === 0) return;
+
+        // A telefonfotókat még a küldés előtt kicsinyítjük — enélkül egy
+        // tíz fotós napi jelentés mobilhálózaton percekig töltődne.
+        const ready = await prepare(Array.from(files));
+
+        form.setData('photos', [...form.data.photos, ...ready]);
     };
 
     const removeNewPhoto = (index: number) =>
@@ -373,6 +379,11 @@ export default function Form() {
                             className="hidden"
                         />
                     </label>
+                    {preparing && (
+                        <p className="text-xs text-accent-700">
+                            Fotók előkészítése… {preparing.done} / {preparing.total}
+                        </p>
+                    )}
                     <InputError message={form.errors.photos as string | undefined} />
 
                     {/* Meglévő fotók (szerkesztés) */}
@@ -381,7 +392,13 @@ export default function Form() {
                             {keptPhotos.map((p) => (
                                 <div key={p.id} className="group relative aspect-square overflow-hidden rounded-lg border border-line">
                                     {p.is_image ? (
-                                        <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                                        <img
+                                            src={p.thumb_url ?? p.url}
+                                            alt={p.name}
+                                            loading="lazy"
+                                            decoding="async"
+                                            className="h-full w-full object-cover"
+                                        />
                                     ) : (
                                         <div className="flex h-full w-full items-center justify-center bg-cream text-xs text-ink-faint">
                                             {p.name}

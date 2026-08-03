@@ -63,4 +63,8 @@ Route::middleware(['auth', 'can:documents.view'])->group(function () {
 
     Route::get('/document-versions/{version}/preview', [DocumentVersionController::class, 'preview'])
         ->name('documents.versions.preview');
+
+    // Bélyegkép a rács-/listanézethez (?size=160|400|1200).
+    Route::get('/document-versions/{version}/thumb', [DocumentVersionController::class, 'thumb'])
+        ->name('documents.versions.thumb');
 });

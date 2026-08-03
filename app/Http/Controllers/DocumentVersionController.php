@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ServesThumbnails;
 use App\Http\Requests\DocumentRequest;
 use App\Models\Document;
 use App\Models\DocumentVersion;
@@ -14,6 +15,8 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class DocumentVersionController extends Controller
 {
+    use ServesThumbnails;
+
     /**
      * Új verzió feltöltése — a régi megmarad, az új lesz az aktuális (spec §10).
      */
@@ -99,6 +102,29 @@ class DocumentVersionController extends Controller
         return $this->serve($version, inline: true);
     }
 
+    /**
+     * Bélyegkép (kicsinyített kép) — a fájlkezelő rács- és listanézetéhez.
+     *
+     * A `size` paraméter a leghosszabb élt kéri képpontban (App\Services\
+     * Thumbnails::SIZES). Ha nem készíthető bélyegkép, az eredeti előnézet jön
+     * vissza, hogy a felület sose maradjon kép nélkül.
+     */
+    public function thumb(Request $request, DocumentVersion $version): SymfonyResponse
+    {
+        abort_unless($version->document->isVisibleTo($request->user()), 404);
+        abort_unless($version->isPreviewable(), 404);
+
+        $thumb = $this->thumbnailResponse(
+            $request,
+            "docver-{$version->id}",
+            $version->disk,
+            $version->file_path,
+            $version->mime_type,
+        );
+
+        return $thumb ?? $this->serve($version, inline: true);
+    }
+
     private function serve(DocumentVersion $version, bool $inline): SymfonyResponse
     {
         $storage = Storage::disk($version->disk);
@@ -125,6 +151,9 @@ class DocumentVersionController extends Controller
                 'Content-Type' => $version->mime_type ?? 'application/octet-stream',
                 // A böngésző ne találgassa a típust (bármilyen formátum feltölthető).
                 'X-Content-Type-Options' => 'nosniff',
+                // Egy verzió fájlja sosem változik, ezért a böngésző nyugodtan
+                // eltárolhatja — de csak ő (jogosultsághoz kötött tartalom).
+                'Cache-Control' => 'private, max-age=604800',
             ]);
         }
 

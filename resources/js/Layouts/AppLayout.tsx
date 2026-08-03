@@ -16,7 +16,9 @@ export default function AppLayout({ children }: PropsWithChildren) {
     }, []);
 
     return (
-        <div className="flex h-screen overflow-hidden bg-cream">
+        // A `dvh` a mobil böngészők ténylegesen látható magassága: a `vh` a
+        // címsávot is beleszámolja, ezért görgetéskor „ugrálna” az elrendezés.
+        <div className="flex h-[100dvh] overflow-hidden bg-cream">
             {/* Desktop sidebar */}
             <aside className="hidden w-64 shrink-0 lg:block">
                 <Sidebar />
@@ -39,8 +41,10 @@ export default function AppLayout({ children }: PropsWithChildren) {
             {/* Main column */}
             <div className="flex flex-1 flex-col overflow-hidden">
                 <Topbar onOpenSidebar={() => setMobileOpen(true)} />
-                <main className="flex-1 overflow-y-auto">
-                    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden">
+                    {/* Telefonon szűkebb margó (több hely a tartalomnak), és a
+                        lap alján hely a rendszersávnak / lebegő gomboknak. */}
+                    <div className="mx-auto max-w-7xl px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:py-6 lg:px-8">
                         <FlashBanner />
                         {children}
                     </div>

@@ -1,5 +1,6 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
+import { Dialog, DialogBackdrop, DialogPanel } from '@headlessui/react';
 import {
     AppWindow,
     ArrowUpDown,
@@ -28,6 +29,7 @@ import {
     Table2,
     Trash2,
     Upload,
+    X,
 } from 'lucide-react';
 import clsx from 'clsx';
 import AppLayout from '@/Layouts/AppLayout';
@@ -36,8 +38,10 @@ import ContextMenu, { type MenuEntry, type QuickAction } from '@/Pages/Documents
 import ConfirmDialog from '@/Pages/Documents/Partials/ConfirmDialog';
 import FolderTree from '@/Pages/Documents/Partials/FolderTree';
 import ItemView, { type ItemHandlers } from '@/Pages/Documents/Partials/ItemView';
+import MobileExplorer, { type MobileView } from '@/Pages/Documents/Partials/MobileExplorer';
 import MoveDialog from '@/Pages/Documents/Partials/MoveDialog';
 import NameDialog from '@/Pages/Documents/Partials/NameDialog';
+import SheetMenu from '@/Pages/Documents/Partials/SheetMenu';
 import PropertiesDialog from '@/Pages/Documents/Partials/PropertiesDialog';
 import TemplateDialog, { type FolderTemplate } from '@/Pages/Documents/Partials/TemplateDialog';
 import UploadDialog from '@/Pages/Documents/Partials/UploadDialog';
@@ -74,6 +78,7 @@ import {
     writeNav,
 } from '@/Pages/Documents/Partials/explorer';
 import { usePageProps } from '@/hooks/usePageProps';
+import { useIsMobile, useIsTouch } from '@/hooks/useMediaQuery';
 import { fmtBytes } from '@/lib/format';
 import type {
     AclEntry,
@@ -127,10 +132,11 @@ export default function Index() {
     } = props;
     const pageErrors = (props.errors ?? {}) as Record<string, string>;
 
-    const coarse = useMemo(
-        () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches,
-        [],
-    );
+    /** Érintőképernyő: más KEZELÉS (nincs jobbklikk, nincs húzás–ejtés). */
+    const coarse = useIsTouch();
+
+    /** Keskeny képernyő: teljesen más FELÜLET (MobileExplorer). */
+    const mobile = useIsMobile();
 
     /* ---------------- nézet + rendezés ---------------- */
     const [view, setView] = useState<ViewMode>(() =>
@@ -220,13 +226,37 @@ export default function Index() {
     } | null>(null);
     const [busy, setBusy] = useState(false);
 
+    /* ---------------- mobil felület ---------------- */
+    /** Ugyanaz a menü, mint az asztali helyi menü — csak alulról felcsúszó lapon. */
+    const [sheet, setSheet] = useState<{
+        title?: string;
+        entries: MenuEntry[];
+        quick?: QuickAction[];
+    } | null>(null);
+    /** Kijelölés-mód (hosszú nyomásra indul), alsó műveletsávval. */
+    const [selecting, setSelecting] = useState(false);
+    /** Mappafa csúszkás panelen (az asztali bal oldali oszlop helyett). */
+    const [treeOpen, setTreeOpen] = useState(false);
+    /** Telefonon a helyben szerkesztés helyett párbeszéd nevez át. */
+    const [renameTarget, setRenameTarget] = useState<ExplorerItem | null>(null);
+    const [mobileView, setMobileView] = useState<MobileView>(() =>
+        localStorage.getItem('octopus.files.mobileview') === 'grid' ? 'grid' : 'list',
+    );
+    useEffect(
+        () => localStorage.setItem('octopus.files.mobileview', mobileView),
+        [mobileView],
+    );
+
     const dialogOpen =
         newFolderIn !== null ||
         templateTarget !== null ||
         moveTargets !== null ||
         propsTarget !== null ||
         upload !== null ||
-        confirm !== null;
+        confirm !== null ||
+        renameTarget !== null ||
+        sheet !== null ||
+        treeOpen;
 
     /* ---------------- fájl-bemenetek ---------------- */
     const fileInput = useRef<HTMLInputElement>(null);
@@ -355,6 +385,9 @@ export default function Index() {
         setSelected(new Set());
         setRenaming(null);
         setMenu(null);
+        setSheet(null);
+        setSelecting(false);
+        setTreeOpen(false);
         router.get(
             route('documents.index'),
             id ? { folder: id } : {},
@@ -426,6 +459,7 @@ export default function Index() {
                 ...visitOptions,
                 onSuccess: () => {
                     setSelected(new Set());
+                    setSelecting(false);
                     onDone?.();
                 },
             },
@@ -474,6 +508,9 @@ export default function Index() {
         };
         setClipboard(state);
         writeClipboard(state);
+        // Mobilon a vágólapra tétel után a kijelölés-módnak nincs több dolga —
+        // a beillesztés a célmappában, az állapotsorból történik.
+        if (mobile) setSelecting(false);
     };
 
     const paste = (targetId: number | null = folderId) => {
@@ -491,7 +528,12 @@ export default function Index() {
         const target = item ?? selectedItems[0];
         if (!target) return;
         selectOnly(keyOf(target));
-        setRenaming(keyOf(target));
+
+        // Telefonon a helyben szerkesztett mezőt kitakarja a billentyűzet, és a
+        // Windows-os „kiterjesztés nélküli rész kijelölve” szokás sem él —
+        // ezért ott párbeszéd kéri be az új nevet.
+        if (mobile) setRenameTarget(target);
+        else setRenaming(keyOf(target));
     };
 
     const refresh = () => router.reload();
@@ -538,12 +580,21 @@ export default function Index() {
     };
 
     /* ---------------- helyi menük ---------------- */
+    /**
+     * Menü nyitása. Asztalon a kurzorhoz igazított helyi menü, telefonon
+     * ugyanaz a tartalom alulról felcsúszó lapon — így minden menüpont
+     * (jobbklikk-menü, eszköztár-menük, fa-menü) érintéssel is elérhető.
+     */
     const openMenuAt = (
         x: number,
         y: number,
         entries: MenuEntry[],
         quick?: QuickAction[],
-    ) => setMenu({ x, y, entries, quick });
+        title?: string,
+    ) => {
+        if (mobile) setSheet({ title, entries, quick });
+        else setMenu({ x, y, entries, quick });
+    };
 
     const viewSubmenu = (): MenuEntry[] =>
         (
@@ -839,6 +890,99 @@ export default function Index() {
         e.stopPropagation();
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
         openMenuAt(rect.left, rect.bottom + 4, entries);
+    };
+
+    /* ---------------- mobil menük ---------------- */
+
+    /** A lebegő „+” gomb menüje — a fényképezés van elöl, az a leggyakoribb. */
+    const mobileCreateMenu = (): MenuEntry[] => [
+        {
+            label: 'Fényképezés',
+            icon: Camera,
+            disabled: !can.create,
+            onClick: () => cameraInput.current?.click(),
+        },
+        {
+            label: 'Kép a galériából',
+            icon: ImageIcon,
+            disabled: !can.create,
+            onClick: () => galleryInput.current?.click(),
+        },
+        {
+            label: 'Fájlok feltöltése…',
+            icon: Upload,
+            disabled: !can.create,
+            onClick: () => fileInput.current?.click(),
+        },
+        { separator: true },
+        {
+            label: 'Új mappa',
+            icon: FolderPlus,
+            disabled: !can.create,
+            onClick: () => setNewFolderIn({ id: folderId }),
+        },
+        {
+            label: 'Mappastruktúra sablonból…',
+            icon: LayoutTemplate,
+            disabled: !can.create,
+            onClick: () => setTemplateTarget({ id: folderId, path: currentPath }),
+        },
+    ];
+
+    /** A fejléc „⋮” menüje: ami az asztali parancssávban és háttérmenüben van. */
+    const mobileMoreMenu = (): MenuEntry[] => [
+        {
+            label: 'Kijelölés',
+            icon: CheckCheck,
+            disabled: items.length === 0,
+            onClick: () => {
+                setSelected(new Set());
+                setSelecting(true);
+            },
+        },
+        { label: 'Rendezés', icon: ArrowUpDown, submenu: sortSubmenu() },
+        {
+            label: 'Beillesztés',
+            icon: ClipboardPaste,
+            disabled: !clipboard || !can.create || searchMode,
+            onClick: () => paste(),
+        },
+        { separator: true },
+        {
+            label: 'Új mappa',
+            icon: FolderPlus,
+            disabled: !can.create || searchMode,
+            onClick: () => setNewFolderIn({ id: folderId }),
+        },
+        {
+            label: 'Mappastruktúra sablonból…',
+            icon: LayoutTemplate,
+            disabled: !can.create || searchMode,
+            onClick: () => setTemplateTarget({ id: folderId, path: currentPath }),
+        },
+        { separator: true },
+        { label: 'Frissítés', icon: RefreshCw, onClick: refresh },
+        {
+            label: 'Tulajdonságok',
+            icon: Info,
+            disabled: !currentFolder,
+            onClick: () =>
+                currentFolder && setPropsTarget({ type: 'folder', id: currentFolder.id }),
+        },
+    ];
+
+    /** Egy elem „⋮” menüje: a kijelölés egészére vonatkozik, ha az elem benne van. */
+    const openItemSheet = (item: ExplorerItem) => {
+        const key = keyOf(item);
+        const targets = selected.has(key) && selected.size > 1 ? selectedItems : [item];
+
+        if (!selected.has(key)) selectOnly(key);
+
+        setSheet({
+            title: targets.length > 1 ? `${targets.length} elem` : nameOf(item),
+            entries: itemMenu(item, targets),
+            quick: itemQuick(item, targets),
+        });
     };
 
     /* ---------------- húzás–ejtés ---------------- */
@@ -1230,6 +1374,68 @@ export default function Index() {
                 }}
             />
 
+            {mobile ? (
+                /* ---------------- mobil felület ---------------- */
+                <MobileExplorer
+                    items={items}
+                    breadcrumbs={breadcrumbs}
+                    restricted={!!currentFolder?.is_restricted}
+                    canUp={canUp}
+                    parentId={parentId}
+                    onNavigate={visitFolder}
+                    search={search}
+                    onSearchChange={setSearch}
+                    searchMode={searchMode}
+                    onClearSearch={() => {
+                        setSearch('');
+                        visitFolder(folderId);
+                    }}
+                    view={mobileView}
+                    onViewChange={setMobileView}
+                    selected={selected}
+                    selecting={selecting}
+                    onToggle={(item) => {
+                        const key = keyOf(item);
+                        setSelected((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(key)) next.delete(key);
+                            else next.add(key);
+                            if (next.size === 0) setSelecting(false);
+
+                            return next;
+                        });
+                    }}
+                    onBeginSelect={(item) => {
+                        setSelecting(true);
+                        selectOnly(keyOf(item));
+                    }}
+                    onEndSelect={() => {
+                        setSelecting(false);
+                        setSelected(new Set());
+                    }}
+                    onSelectAll={() => setSelected(new Set(items.map(keyOf)))}
+                    onOpen={openItem}
+                    onItemMenu={openItemSheet}
+                    onBackgroundMenu={() =>
+                        setSheet({
+                            title: breadcrumbs[breadcrumbs.length - 1]?.name ?? 'Fájlok',
+                            entries: mobileMoreMenu(),
+                        })
+                    }
+                    onCreateMenu={() => setSheet({ title: 'Új', entries: mobileCreateMenu() })}
+                    onSortMenu={() => setSheet({ title: 'Rendezés', entries: sortSubmenu() })}
+                    onTree={() => setTreeOpen(true)}
+                    can={can}
+                    clipboardCount={clipboard?.items.length ?? 0}
+                    onCut={() => putClipboard('cut', selectedItems)}
+                    onCopy={() => putClipboard('copy', selectedItems)}
+                    onPaste={() => paste()}
+                    onMove={() => setMoveTargets(selectedItems)}
+                    onRename={() => startRename()}
+                    onDelete={() => requestDelete(selectedItems)}
+                    busy={busy}
+                />
+            ) : (
             <div className="o-card overflow-hidden">
                 <AddressBar
                     breadcrumbs={breadcrumbs}
@@ -1461,6 +1667,7 @@ export default function Index() {
                     </span>
                 </div>
             </div>
+            )}
 
             {/* Gumikeret */}
             {marquee && (
@@ -1480,6 +1687,94 @@ export default function Index() {
                     onClose={() => setMenu(null)}
                 />
             )}
+
+            {/* Ugyanaz érintésre: alulról felcsúszó lap */}
+            <SheetMenu
+                open={sheet !== null}
+                title={sheet?.title}
+                items={sheet?.entries ?? []}
+                quick={sheet?.quick}
+                onClose={() => setSheet(null)}
+            />
+
+            {/* Mappafa telefonon: csúszkás panel */}
+            <Dialog open={treeOpen} onClose={setTreeOpen} className="relative z-50">
+                <DialogBackdrop className="fixed inset-0 bg-black/40" />
+                <div className="fixed inset-0 flex">
+                    <DialogPanel className="flex w-[85%] max-w-xs flex-col bg-white shadow-xl">
+                        <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
+                            <span className="text-sm font-semibold text-sidebar">Mappák</span>
+                            <button
+                                type="button"
+                                onClick={() => setTreeOpen(false)}
+                                aria-label="Bezárás"
+                                className="flex h-9 w-9 items-center justify-center rounded-[4px] text-ink-soft active:bg-cream"
+                            >
+                                <X size={19} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2">
+                            <FolderTree
+                                tree={tree}
+                                selectedId={folderId}
+                                onSelect={visitFolder}
+                                onContextMenu={(id, e) => {
+                                    e.preventDefault();
+                                    const node = tree.find((f) => f.id === id);
+                                    setTreeOpen(false);
+                                    setSheet({
+                                        title: node?.name ?? 'Fájlok',
+                                        entries: [
+                                            {
+                                                label: 'Megnyitás',
+                                                icon: FolderOpen,
+                                                onClick: () => visitFolder(id),
+                                            },
+                                            {
+                                                label: 'Új',
+                                                icon: FolderPlus,
+                                                disabled: !can.create,
+                                                submenu: newSubmenu(id, node?.name ?? 'Fájlok'),
+                                            },
+                                            {
+                                                label: 'Beillesztés',
+                                                icon: ClipboardPaste,
+                                                disabled: !clipboard,
+                                                onClick: () => paste(id),
+                                            },
+                                            { separator: true },
+                                            {
+                                                label: 'Tulajdonságok',
+                                                icon: Info,
+                                                disabled: id === null,
+                                                onClick: () =>
+                                                    id !== null &&
+                                                    setPropsTarget({ type: 'folder', id }),
+                                            },
+                                        ],
+                                    });
+                                }}
+                            />
+                        </div>
+                    </DialogPanel>
+                </div>
+            </Dialog>
+
+            {/* Átnevezés telefonon (a helyben szerkesztés helyett) */}
+            <NameDialog
+                open={renameTarget !== null}
+                title="Átnevezés"
+                label={renameTarget?.type === 'folder' ? 'A mappa neve' : 'A fájl neve'}
+                initial={renameTarget ? nameOf(renameTarget) : ''}
+                submitLabel="Mentés"
+                busy={busy}
+                onSubmit={(name) => {
+                    if (renameTarget) commitRename(renameTarget, name);
+                    setRenameTarget(null);
+                    setSelecting(false);
+                }}
+                onClose={() => setRenameTarget(null)}
+            />
 
             {/* Párbeszédek */}
             <TemplateDialog

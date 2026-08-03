@@ -223,7 +223,7 @@ export default function PropertiesDialog({
         <Dialog open={target !== null} onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
             <div className="fixed inset-0 flex items-center justify-center p-4">
-                <DialogPanel className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-[8px] border border-line bg-white shadow-[0_12px_40px_rgba(33,56,46,0.25)]">
+                <DialogPanel className="flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-[8px] border border-line bg-white shadow-[0_12px_40px_rgba(33,56,46,0.25)]">
                     {/* Fejléc */}
                     <div className="flex items-start gap-3 border-b border-line px-5 py-4">
                         <span className="shrink-0">{icon()}</span>
