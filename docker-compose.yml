@@ -10,6 +10,16 @@ name: octopus
 # occasional crashes), so it is opt-in only:
 #     docker compose --profile dev up      # run with hot-reload
 # In dev mode Vite writes public/hot and Laravel switches to the dev server.
+#
+# PORTS — a publikált portok SZÁNDÉKOSAN 127.0.0.1-re vannak kötve, az adatbázis
+# és a Redis pedig egyáltalán nem publikál portot. Élesben a gép publikus IP-n
+# ül, és egy `0.0.0.0` kötés az internetre nyitná a PostgreSQL-t. A konténerek
+# egymást a compose-hálózaton szolgáltatásnév szerint érik el, ehhez nem kell
+# host-port; élesben a gazdagép nginx-e proxyzza a 127.0.0.1:8080-at.
+#
+# Ha helyben mégis közvetlen adatbázis-kapcsolat kell (pl. DB-kliens), NE ezt a
+# fájlt írd át — tegyél a projekt gyökerébe egy docker-compose.override.yml-t
+# (nincs a gitben), és ott publikáld a portot.
 
 services:
   app:
@@ -37,7 +47,7 @@ services:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     volumes:
       - ./:/var/www/html
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
@@ -65,7 +75,7 @@ services:
       - ./:/var/www/html
       - node_modules:/var/www/html/node_modules
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
     environment:
       - CHOKIDAR_USEPOLLING=true
@@ -107,8 +117,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-octopus}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Nincs publikált port: az `app` a compose-hálózaton éri el. Lásd a fenti
+    # PORTS megjegyzést.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-octopus} -d ${DB_DATABASE:-octopus}"]
       interval: 5s
@@ -121,15 +131,14 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redisdata:/data
-    ports:
-      - "6379:6379"
+    # Nincs publikált port (lásd a fenti PORTS megjegyzést).
 
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "8025:8025"
-      - "1025:1025"
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
 
 volumes:
   pgdata:
