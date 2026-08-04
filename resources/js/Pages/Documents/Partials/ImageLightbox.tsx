@@ -48,11 +48,22 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
     const [zoom, setZoom] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [fullLoaded, setFullLoaded] = useState(false);
+    /** A lapozó húzás közbeni vízszintes eltolás — a kép követi az ujjat. */
+    const [drag, setDrag] = useState(0);
+    const [dragging, setDragging] = useState(false);
 
     const frameRef = useRef<HTMLDivElement>(null);
     /** Az aktív érintések/egérgombok — a csippentéshez kell kettő. */
     const pointers = useRef(new Map<number, { x: number; y: number }>());
-    const gesture = useRef<{ startX: number; dist: number; zoom: number; moved: boolean } | null>(null);
+    const gesture = useRef<{
+        startX: number;
+        startY: number;
+        dist: number;
+        zoom: number;
+        moved: boolean;
+        /** Az első néhány képpont dönti el: vízszintes lapozás vagy sem. */
+        axis: 'x' | 'y' | null;
+    } | null>(null);
     const lastTap = useRef(0);
 
     const image = index !== null ? images[index] : undefined;
@@ -62,6 +73,8 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
         setZoom(1);
         setOffset({ x: 0, y: 0 });
         setFullLoaded(false);
+        setDrag(0);
+        setDragging(false);
     }, []);
 
     // Képváltáskor a nagyítás mindig alaphelyzetbe áll.
@@ -134,15 +147,25 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
     };
 
     const onPointerDown = (e: React.PointerEvent) => {
-        (e.target as Element).setPointerCapture?.(e.pointerId);
+        // Az elkapás a KERETRE megy, nem a megérintett képre: a kép a lapozás
+        // közben kicserélődhet, és az elkapás vele együtt elveszne — emiatt
+        // maradt el a mozgás követése érintőképernyőn.
+        try {
+            frameRef.current?.setPointerCapture(e.pointerId);
+        } catch {
+            // Ha a böngésző nem engedi, a buborékoló események így is megjönnek.
+        }
+
         pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
         const points = [...pointers.current.values()];
         gesture.current = {
             startX: e.clientX,
+            startY: e.clientY,
             dist: points.length === 2 ? Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y) : 0,
             zoom,
             moved: false,
+            axis: null,
         };
     };
 
@@ -160,6 +183,9 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
         if (points.length === 2 && g.dist > 0) {
             const dist = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
             g.moved = true;
+            g.axis = 'y'; // a csippentésből ne legyen lapozás
+            setDrag(0);
+            setDragging(false);
             zoomAround(
                 g.zoom * (dist / g.dist),
                 (points[0].x + points[1].x) / 2,
@@ -171,34 +197,60 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
 
         if (points.length !== 1) return;
 
-        const dx = e.clientX - previous.x;
-        const dy = e.clientY - previous.y;
-        if (Math.abs(e.clientX - g.startX) > 6) g.moved = true;
+        const totalX = e.clientX - g.startX;
+        const totalY = e.clientY - g.startY;
+        if (Math.abs(totalX) > 6 || Math.abs(totalY) > 6) g.moved = true;
 
-        // Nagyításban a húzás pásztáz; alaphelyzetben a lapozásra tartogatjuk.
+        // Nagyításban a húzás pásztáz.
         if (zoom > 1) {
-            setOffset((o) => ({ x: o.x + dx, y: o.y + dy }));
+            setOffset((o) => ({ x: o.x + (e.clientX - previous.x), y: o.y + (e.clientY - previous.y) }));
+
+            return;
+        }
+
+        // Alaphelyzetben lapozunk — de csak ha a mozdulat vízszintes. Az irányt
+        // az első ~10 képpont dönti el, utána nem vált (így a függőleges
+        // mozdulatból soha nem lesz véletlen lapozás).
+        if (g.axis === null && Math.abs(totalX) + Math.abs(totalY) > 10) {
+            g.axis = Math.abs(totalX) > Math.abs(totalY) ? 'x' : 'y';
+        }
+
+        if (g.axis === 'x') {
+            setDragging(true);
+            setDrag(totalX);
         }
     };
 
     const onPointerUp = (e: React.PointerEvent) => {
         const start = gesture.current;
-        const point = pointers.current.get(e.pointerId);
-        pointers.current.delete(e.pointerId);
+        const known = pointers.current.delete(e.pointerId);
 
-        if (!start || !point) return;
+        try {
+            frameRef.current?.releasePointerCapture(e.pointerId);
+        } catch {
+            // már elengedte
+        }
+
+        if (!start || !known) return;
         if (pointers.current.size > 0) return; // csippentés közben még van ujj a képen
 
-        // Lapozó húzás csak alaphelyzetben.
-        if (zoom === 1) {
-            const dx = e.clientX - start.startX;
-            if (Math.abs(dx) > SWIPE_PX) {
-                step(dx < 0 ? 1 : -1);
-                gesture.current = null;
+        gesture.current = null;
+        setDragging(false);
 
-                return;
-            }
+        // Lapozás: a képernyő szélességéhez mért küszöb, hogy telefonon és
+        // asztali gépen is természetes legyen.
+        if (zoom === 1 && start.axis === 'x') {
+            const width = frameRef.current?.clientWidth ?? 0;
+            const threshold = Math.max(SWIPE_PX, width * 0.15);
+            const dx = e.clientX - start.startX;
+
+            setDrag(0);
+            if (Math.abs(dx) > threshold) step(dx < 0 ? 1 : -1);
+
+            return;
         }
+
+        setDrag(0);
 
         // Dupla koppintás / kattintás: nagyítás váltása.
         if (!start.moved) {
@@ -210,8 +262,14 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
                 lastTap.current = now;
             }
         }
+    };
 
+    /** Megszakított gesztus (pl. bejövő hívás): visszaáll, nem lapoz. */
+    const onPointerCancel = (e: React.PointerEvent) => {
+        pointers.current.delete(e.pointerId);
         gesture.current = null;
+        setDragging(false);
+        setDrag(0);
     };
 
     const onWheel = (e: React.WheelEvent) => {
@@ -278,15 +336,15 @@ export default function ImageLightbox({ images, index, onIndex, onClose }: Props
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                onPointerCancel={onPointerUp}
+                onPointerCancel={onPointerCancel}
                 onWheel={onWheel}
                 onDoubleClick={(e) => toggleZoom(e.clientX, e.clientY)}
             >
                 <div
                     className="absolute inset-0 flex items-center justify-center"
                     style={{
-                        transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                        transition: gesture.current ? 'none' : 'transform 120ms ease-out',
+                        transform: `translate(${offset.x + drag}px, ${offset.y}px) scale(${zoom})`,
+                        transition: dragging ? 'none' : 'transform 160ms ease-out',
                     }}
                 >
                     <img
