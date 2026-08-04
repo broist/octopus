@@ -46,6 +46,15 @@ export interface ItemCalc {
      */
     materialTotal: number | null;
     laborTotal: number | null;
+    /**
+     * Az ügyfélnek mutatott anyag/díj bontás — a HASZONNAL NÖVELT ajánlati áron.
+     * Az ajánlati ár a költségalap anyag–munkadíj arányában oszlik ketté, a
+     * maradék a díjra kerül, így a kettő összege pontosan `offer`.
+     * Manuális alapnál a saját egységárak aránya a viszonyítás; ha az sincs,
+     * a teljes összeg díj.
+     */
+    offerMaterial: number;
+    offerLabor: number;
 }
 
 export function calcItem(quote: QuoteData, category: QuoteCategory, item: QuoteItem): ItemCalc {
@@ -73,6 +82,12 @@ export function calcItem(quote: QuoteData, category: QuoteCategory, item: QuoteI
               : eround(base * (1 + value / 100));
 
     const profit = offer - base;
+
+    const refMaterial = item.basis === 'sub' ? subMaterial : ownMaterial;
+    const refLabor = item.basis === 'sub' ? subLabor : ownLabor;
+    const reference = refMaterial + refLabor;
+    const offerMaterial = reference !== 0 ? eround((offer * refMaterial) / reference) : 0;
+
     return {
         quantity: qty,
         ownCost,
@@ -84,27 +99,35 @@ export function calcItem(quote: QuoteData, category: QuoteCategory, item: QuoteI
         markup: base ? (profit / base) * 100 : 0,
         materialTotal: item.basis === 'manual' ? null : item.basis === 'sub' ? subMaterial : ownMaterial,
         laborTotal: item.basis === 'manual' ? null : item.basis === 'sub' ? subLabor : ownLabor,
+        offerMaterial,
+        offerLabor: offer - offerMaterial,
     };
 }
 
 export interface CategoryCalc {
     base: number;
     offer: number;
+    offerMaterial: number;
+    offerLabor: number;
     profit: number;
 }
 
 export function calcCategory(quote: QuoteData, category: QuoteCategory): CategoryCalc {
     let base = 0;
     let offer = 0;
+    let offerMaterial = 0;
+    let offerLabor = 0;
     let profit = 0;
     for (const item of category.items ?? []) {
         if (!item.active) continue;
         const c = calcItem(quote, category, item);
         base += c.base;
         offer += c.offer;
+        offerMaterial += c.offerMaterial;
+        offerLabor += c.offerLabor;
         profit += c.profit;
     }
-    return { base, offer, profit };
+    return { base, offer, offerMaterial, offerLabor, profit };
 }
 
 export interface ProjectCalc {
@@ -113,7 +136,12 @@ export interface ProjectCalc {
     subCost: number;
     baseCost: number;
     itemOffer: number;
+    offerMaterial: number;
+    offerLabor: number;
     netOffer: number;
+    /** A nettó végösszeg anyag-, illetve díjrésze (a kettő összege a netOffer). */
+    netMaterial: number;
+    netLabor: number;
     vat: number;
     grossOffer: number;
     profit: number;
@@ -124,6 +152,8 @@ export interface ProjectCalc {
 export function calcProject(quote: QuoteData): ProjectCalc {
     let baseCost = 0;
     let itemOffer = 0;
+    let offerMaterial = 0;
+    let offerLabor = 0;
     let subCost = 0;
     let ownMaterial = 0;
     let ownLabor = 0;
@@ -139,6 +169,8 @@ export function calcProject(quote: QuoteData): ProjectCalc {
             subCost += c.subCost;
             baseCost += c.base;
             itemOffer += c.offer;
+            offerMaterial += c.offerMaterial;
+            offerLabor += c.offerLabor;
         }
     }
 
@@ -151,13 +183,22 @@ export function calcProject(quote: QuoteData): ProjectCalc {
     const grossOffer = netOffer + vat;
     const profit = netOffer - baseCost;
 
+    // A projektszintű korrekciók (kedvezmény, tartalék, projektköltség,
+    // kerekítés) a tételek anyag–díj arányában oszlanak szét; a maradék a díjra
+    // kerül, hogy a két szám összege pontosan a nettó ajánlati összeg legyen.
+    const netMaterial = itemOffer !== 0 ? eround((netOffer * offerMaterial) / itemOffer) : 0;
+
     return {
         ownMaterial,
         ownLabor,
         subCost,
         baseCost,
         itemOffer,
+        offerMaterial,
+        offerLabor,
         netOffer,
+        netMaterial,
+        netLabor: netOffer - netMaterial,
         vat,
         grossOffer,
         profit,

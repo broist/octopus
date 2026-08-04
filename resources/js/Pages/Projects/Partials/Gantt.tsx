@@ -1,6 +1,26 @@
 import { useMemo } from 'react';
 import { phaseRef } from '@/lib/phases';
-import type { PhaseItem } from '@/types/models';
+import type { PhaseDependency } from '@/types/models';
+
+/**
+ * A Gantt-hoz szükséges minimális fázis. Szándékosan szűkebb a `PhaseItem`-nél,
+ * hogy az ügyfélportál is használhassa: ott a függőségek belső tervezési
+ * adatok, ezért ki sem mennek a válaszba — nyíl és ütközés-sáv nélkül rajzolunk.
+ */
+export interface GanttPhase {
+    id: number;
+    seq: number;
+    name: string;
+    level: number;
+    wbs: string | null;
+    is_group: boolean;
+    starts_on: string | null;
+    due_on: string | null;
+    progress: number;
+    is_overdue: boolean;
+    depends_on?: number[];
+    dependencies?: PhaseDependency[];
+}
 
 const MS_PER_DAY = 86_400_000;
 const LABEL_W = 230;
@@ -17,7 +37,7 @@ function parseDate(value: string): Date {
 }
 
 interface Row {
-    phase: PhaseItem;
+    phase: GanttPhase;
     start: Date;
     end: Date;
     overdue: boolean;
@@ -33,7 +53,7 @@ interface Overlap {
  * Könnyű, saját SVG Gantt: fázisok idővonalon, készültség-kitöltéssel,
  * függőség-nyilakkal, "ma" vonallal. Csúszó fázis korallal jelölve (spec §6).
  */
-export default function Gantt({ phases }: { phases: PhaseItem[] }) {
+export default function Gantt({ phases }: { phases: GanttPhase[] }) {
     const model = useMemo(() => {
         const rows: Row[] = phases
             .filter((p) => p.starts_on && p.due_on)
@@ -200,7 +220,7 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
 
                 {/* Függőség-nyilak */}
                 {rows.map((r) =>
-                    r.phase.depends_on.map((depId) => {
+                    (r.phase.depends_on ?? []).map((depId) => {
                         const fromIdx = rowIndex.get(depId);
                         const toIdx = rowIndex.get(r.phase.id);
                         if (fromIdx === undefined || toIdx === undefined) return null;
@@ -318,9 +338,11 @@ export default function Gantt({ phases }: { phases: PhaseItem[] }) {
                     <span className="inline-block h-3 w-px border-l border-dashed border-coral" />{' '}
                     Mai nap
                 </span>
-                <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-5 rounded-sm bg-coral/20" /> Ütközés / párhuzam
-                </span>
+                {overlaps.length > 0 && (
+                    <span className="flex items-center gap-1.5">
+                        <span className="h-2.5 w-5 rounded-sm bg-coral/20" /> Ütközés / párhuzam
+                    </span>
+                )}
                 <span className="flex items-center gap-1.5">
                     <span className="h-1 w-5 rounded-sm bg-sidebar" /> Összegző sor
                 </span>

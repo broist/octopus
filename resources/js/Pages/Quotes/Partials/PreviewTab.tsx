@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import SavePdfDialog from '@/Pages/Quotes/Partials/SavePdfDialog';
 import PortalShareCard from '@/Pages/Quotes/Partials/PortalShareCard';
 import type { QuoteClientSharing, QuoteProjectOption } from '@/Pages/Quotes/Partials/PortalShareCard';
-import { calcItem, fmtHuf, fmtPercent } from '@/lib/quote';
+import { calcCategory, calcItem, fmtHuf, fmtPercent } from '@/lib/quote';
 import type { ProjectCalc } from '@/lib/quote';
 import type { FolderOption, PdfMode, QuoteData } from '@/types/quote';
 
@@ -161,12 +161,22 @@ export default function PreviewTab({
                         <div className="space-y-4">
                             {activeCategories.map((cat) => {
                                 let catOffer = 0;
+                                let catMaterial = 0;
+                                let catLabor = 0;
                                 const rows = cat.items
                                     .filter((i) => i.active)
                                     .map((item) => {
                                         const c = calcItem(data, cat, item);
                                         catOffer += c.offer;
-                                        return { item, offer: c.offer, qty: c.quantity };
+                                        catMaterial += c.offerMaterial;
+                                        catLabor += c.offerLabor;
+                                        return {
+                                            item,
+                                            offer: c.offer,
+                                            qty: c.quantity,
+                                            material: c.offerMaterial,
+                                            labor: c.offerLabor,
+                                        };
                                     });
                                 return (
                                     <div key={cat.id}>
@@ -175,43 +185,59 @@ export default function PreviewTab({
                                             ugyanott futnak, ahogy a PDF-ben is (QuotePdf::COLS_*). */}
                                         <table className="w-full table-fixed border-collapse text-sm">
                                             <colgroup>
-                                                <col style={{ width: showQty ? '56%' : '74%' }} />
-                                                {showQty && <col style={{ width: '12%' }} />}
-                                                {showQty && <col style={{ width: '10%' }} />}
-                                                <col style={{ width: showQty ? '22%' : '26%' }} />
+                                                <col style={{ width: showQty ? '31%' : '40%' }} />
+                                                {showQty && <col style={{ width: '9%' }} />}
+                                                {showQty && <col style={{ width: '8%' }} />}
+                                                <col style={{ width: showQty ? '17%' : '20%' }} />
+                                                <col style={{ width: showQty ? '17%' : '20%' }} />
+                                                <col style={{ width: showQty ? '18%' : '20%' }} />
                                             </colgroup>
                                             <thead>
                                                 <tr className="bg-[#F04A24] text-left text-xs text-white">
-                                                    <th className="px-3 py-1.5">Műszaki tartalom</th>
-                                                    {showQty && <th className="px-3 py-1.5 text-right">Menny.</th>}
-                                                    {showQty && <th className="px-3 py-1.5 text-center">Egység</th>}
-                                                    <th className="px-3 py-1.5 text-right">Nettó összeg</th>
+                                                    <th className="px-2 py-1.5">Műszaki tartalom</th>
+                                                    {showQty && <th className="px-2 py-1.5 text-right">Menny.</th>}
+                                                    {showQty && <th className="px-2 py-1.5 text-center">Egység</th>}
+                                                    <th className="px-2 py-1.5 text-right">Anyag összesen</th>
+                                                    <th className="px-2 py-1.5 text-right">Díj összesen</th>
+                                                    <th className="px-2 py-1.5 text-right">Nettó összeg</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {rows.map(({ item, offer, qty }) => (
+                                                {rows.map(({ item, offer, qty, material, labor }) => (
                                                     <tr key={item.id} className="border-b border-line">
-                                                        <td className="break-words px-3 py-1.5">
+                                                        <td className="break-words px-2 py-1.5">
                                                             {item.description}
                                                         </td>
                                                         {showQty && (
-                                                            <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                                                            <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
                                                                 {qty.toLocaleString('hu-HU')}
                                                             </td>
                                                         )}
                                                         {showQty && (
-                                                            <td className="px-3 py-1.5 text-center">{item.unit}</td>
+                                                            <td className="px-2 py-1.5 text-center">{item.unit}</td>
                                                         )}
-                                                        <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                                                        <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                                                            {fmtHuf(material)}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                                                            {fmtHuf(labor)}
+                                                        </td>
+                                                        <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
                                                             {fmtHuf(offer)}
                                                         </td>
                                                     </tr>
                                                 ))}
                                                 <tr className="bg-cream font-semibold">
-                                                    <td className="px-3 py-1.5" colSpan={showQty ? 3 : 1}>
+                                                    <td className="px-2 py-1.5" colSpan={showQty ? 3 : 1}>
                                                         Munkanem összesen
                                                     </td>
-                                                    <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
+                                                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                                                        {fmtHuf(catMaterial)}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                                                        {fmtHuf(catLabor)}
+                                                    </td>
+                                                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
                                                         {fmtHuf(catOffer)}
                                                     </td>
                                                 </tr>
@@ -224,24 +250,32 @@ export default function PreviewTab({
                     ) : (
                         <table className="w-full table-fixed border-collapse text-sm">
                             <colgroup>
-                                <col style={{ width: '74%' }} />
-                                <col style={{ width: '26%' }} />
+                                <col style={{ width: '40%' }} />
+                                <col style={{ width: '20%' }} />
+                                <col style={{ width: '20%' }} />
+                                <col style={{ width: '20%' }} />
                             </colgroup>
                             <thead>
                                 <tr className="bg-[#F04A24] text-left text-xs text-white">
-                                    <th className="px-3 py-2">Munkanem</th>
-                                    <th className="px-3 py-2 text-right">Nettó összeg</th>
+                                    <th className="px-2 py-2">Munkanem</th>
+                                    <th className="px-2 py-2 text-right">Anyag összesen</th>
+                                    <th className="px-2 py-2 text-right">Díj összesen</th>
+                                    <th className="px-2 py-2 text-right">Nettó összeg</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {activeCategories.map((cat) => {
-                                    const offer = cat.items
-                                        .filter((i) => i.active)
-                                        .reduce((s, i) => s + calcItem(data, cat, i).offer, 0);
+                                    const c = calcCategory(data, cat);
                                     return (
                                         <tr key={cat.id} className="border-b border-line">
-                                            <td className="px-3 py-2">{cat.title}</td>
-                                            <td className="px-3 py-2 text-right tabular-nums">{fmtHuf(offer)}</td>
+                                            <td className="px-2 py-2">{cat.title}</td>
+                                            <td className="px-2 py-2 text-right tabular-nums">
+                                                {fmtHuf(c.offerMaterial)}
+                                            </td>
+                                            <td className="px-2 py-2 text-right tabular-nums">
+                                                {fmtHuf(c.offerLabor)}
+                                            </td>
+                                            <td className="px-2 py-2 text-right tabular-nums">{fmtHuf(c.offer)}</td>
                                         </tr>
                                     );
                                 })}
@@ -249,9 +283,11 @@ export default function PreviewTab({
                         </table>
                     )}
 
-                    {/* Összesítés */}
+                    {/* Összesítés — a nettó végösszeg anyag/díj bontásával. */}
                     <div className="mt-5 ml-auto max-w-sm overflow-hidden rounded-lg border border-line">
-                        <Row label="Nettó ajánlati összeg" value={fmtHuf(totals.netOffer)} />
+                        <Row label="Ebből anyag összesen (nettó)" value={fmtHuf(totals.netMaterial)} muted />
+                        <Row label="Ebből díj összesen (nettó)" value={fmtHuf(totals.netLabor)} muted />
+                        <Row label="Nettó ajánlati összeg" value={fmtHuf(totals.netOffer)} strong />
                         <Row label={`ÁFA (${fmtPercent(data.vatRate)})`} value={fmtHuf(totals.vat)} />
                         <div className="flex items-center justify-between bg-[#011129] px-4 py-2.5 font-bold text-white">
                             <span>Bruttó ajánlati összeg</span>
@@ -357,11 +393,29 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({
+    label,
+    value,
+    muted,
+    strong,
+}: {
+    label: string;
+    value: string;
+    muted?: boolean;
+    strong?: boolean;
+}) {
     return (
-        <div className="flex items-center justify-between border-b border-line bg-cream/40 px-4 py-2 text-sm">
-            <span className="text-ink-soft">{label}</span>
-            <span className="font-medium tabular-nums text-ink">{value}</span>
+        <div
+            className={clsx(
+                'flex items-center justify-between border-b border-line px-4 py-2',
+                muted ? 'bg-cream/70 text-xs' : 'bg-cream/40 text-sm',
+                strong && 'border-t border-t-ink-faint font-semibold',
+            )}
+        >
+            <span className={muted ? 'text-ink-faint' : 'text-ink-soft'}>{label}</span>
+            <span className={clsx('tabular-nums', muted ? 'text-ink-soft' : 'font-medium text-ink')}>
+                {value}
+            </span>
         </div>
     );
 }

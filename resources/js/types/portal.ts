@@ -48,15 +48,23 @@ export interface PortalProject {
     manager: PortalManager | null;
 }
 
+/**
+ * Ütemterv-sor az ügyfélnek. A szerver csak a beütemezett (aktív) sorokat
+ * küldi ki, ezért itt a `starts_on` / `due_on` a gyakorlatban mindig ki van
+ * töltve — a Gantt közös típusa miatt maradnak nullázhatók.
+ */
 export interface PortalPhase {
     id: number;
+    seq: number;
     level: number;
+    wbs: string | null;
     name: string;
     is_group: boolean;
     is_milestone: boolean;
     starts_on: string | null;
     due_on: string | null;
     progress: number;
+    is_overdue: boolean;
 }
 
 export interface PortalDocument {

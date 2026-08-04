@@ -13,7 +13,7 @@ export const RESOURCE_KINDS: { value: ResourceKind; label: string }[] = [
 ];
 
 /** A fázis hivatkozási száma: sablonból hozott WBS, egyébként sorszám. */
-export function phaseRef(phase: PhaseItem): string {
+export function phaseRef(phase: Pick<PhaseItem, 'wbs' | 'seq'>): string {
     return phase.wbs ?? String(phase.seq);
 }
 

@@ -16,6 +16,7 @@ import {
 import clsx from 'clsx';
 import PortalLayout from '@/Layouts/PortalLayout';
 import ProgressBar from '@/Components/ProgressBar';
+import Gantt from '@/Pages/Projects/Partials/Gantt';
 import QuoteResponse from '@/Pages/Portal/Partials/QuoteResponse';
 import { WeatherChip } from '@/Pages/DailyReports/Partials/Weather';
 import { usePageProps } from '@/hooks/usePageProps';
@@ -184,6 +185,10 @@ export default function ProjectPage() {
                             </p>
                         </section>
                     )}
+
+                    {/* Ütemterv — csak a beütemezett (aktív) lépések; a szerver a
+                        többit ki sem küldi (ClientPortalController::phasePayload). */}
+                    {phases.length > 0 && <Gantt phases={phases} />}
 
                     <section className="o-card">
                         <header className="border-b border-line px-5 py-3">

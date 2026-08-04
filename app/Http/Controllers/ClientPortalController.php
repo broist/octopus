@@ -318,28 +318,45 @@ class ClientPortalController extends Controller
      * Az ütemterv az ügyfélnek: a belső jegyzetek, függőségek és erőforrások
      * nélkül — csak a munkastruktúra, a dátumok és a készültség.
      *
+     * CSAK AZ AKTÍV (beütemezett) sorok mennek ki: az ütemterv-sablon több száz
+     * sorából az ügyfelet kizárólag az érdekli, amit már ténylegesen betettünk a
+     * naptárba. Az „aktív” ismérve — a belső Gantt-tal azonosan — hogy a sornak
+     * van kezdése ÉS határideje; a még ki nem töltött sorok fel sem kerülnek a
+     * portálra. Az összegző sorok dátuma a gyerekekből gördül, így egy
+     * beütemezett sor teljes szülő-útvonala megmarad, a fa nem szakad szét.
+     *
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>
      */
     private function phasePayload(Project $project)
     {
         $rollup = PhaseTree::rollup($project->phases);
+        $today = today()->toDateString();
 
         return PhaseTree::flatten($project->phases)
             ->values()
-            ->map(function (ProjectPhase $ph) use ($rollup) {
+            ->map(function (ProjectPhase $ph, int $i) use ($rollup, $today) {
                 $roll = $rollup[$ph->id] ?? null;
+
+                $startsOn = $ph->is_group ? ($roll['starts_on'] ?? null) : $ph->starts_on?->toDateString();
+                $dueOn = $ph->is_group ? ($roll['due_on'] ?? null) : $ph->due_on?->toDateString();
+                $progress = $ph->is_group ? ($roll['progress'] ?? 0) : $ph->progress;
 
                 return [
                     'id' => $ph->id,
+                    'seq' => $i + 1,
                     'level' => $ph->level,
+                    'wbs' => $ph->wbs,
                     'name' => $ph->name,
                     'is_group' => $ph->is_group,
                     'is_milestone' => $ph->is_milestone,
-                    'starts_on' => $ph->is_group ? ($roll['starts_on'] ?? null) : $ph->starts_on?->toDateString(),
-                    'due_on' => $ph->is_group ? ($roll['due_on'] ?? null) : $ph->due_on?->toDateString(),
-                    'progress' => $ph->is_group ? ($roll['progress'] ?? 0) : $ph->progress,
+                    'starts_on' => $startsOn,
+                    'due_on' => $dueOn,
+                    'progress' => $progress,
+                    'is_overdue' => $dueOn !== null && $dueOn < $today && $progress < 100,
                 ];
-            });
+            })
+            ->filter(fn (array $row) => $row['starts_on'] !== null && $row['due_on'] !== null)
+            ->values();
     }
 
     private function progressOf(Project $project): int

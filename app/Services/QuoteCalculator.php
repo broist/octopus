@@ -84,6 +84,8 @@ class QuoteCalculator
         $margin = $offer ? $profit / $offer * 100 : 0.0;
         $markup = $base ? $profit / $base * 100 : 0.0;
 
+        [$offerMaterial, $offerLabor] = self::splitOffer($item, $offer, $ownMaterial, $ownLabor, $subMaterial, $subLabor);
+
         return [
             'quantity' => $qty,
             'ownMaterial' => $ownMaterial,
@@ -94,10 +96,43 @@ class QuoteCalculator
             'subCost' => $subCost,
             'base' => $base,
             'offer' => $offer,
+            'offerMaterial' => $offerMaterial,
+            'offerLabor' => $offerLabor,
             'profit' => $profit,
             'margin' => $margin,
             'markup' => $markup,
         ];
+    }
+
+    /**
+     * Az ügyfélnek mutatott anyag/díj bontás — a HASZONNAL NÖVELT ajánlati áron.
+     *
+     * A haszonkulcs a teljes tételre vonatkozik, ezért az ajánlati árat a
+     * költségalap anyag–munkadíj arányában osztjuk ketté; a maradékot a díjra
+     * tesszük, így a két szám összege fillérre az ajánlati ár (a PDF-ben az
+     * „Anyag összesen” + „Díj összesen” mindig kiadja a „Nettó összeg”-et).
+     *
+     * Manuális alapnál a saját egységárak arányát használjuk viszonyítási
+     * alapként; ha az sincs kitöltve, az egész összeg díj (nincs elszámolt anyag).
+     *
+     * @return array{0:int,1:int}  [anyag, díj]
+     */
+    private static function splitOffer(
+        array $item,
+        int $offer,
+        int $ownMaterial,
+        int $ownLabor,
+        int $subMaterial,
+        int $subLabor,
+    ): array {
+        $isSub = ($item['basis'] ?? 'own') === 'sub';
+        $material = $isSub ? $subMaterial : $ownMaterial;
+        $labor = $isSub ? $subLabor : $ownLabor;
+        $reference = $material + $labor;
+
+        $offerMaterial = $reference !== 0 ? self::round($offer * $material / $reference) : 0;
+
+        return [$offerMaterial, $offer - $offerMaterial];
     }
 
     /**
@@ -108,13 +143,22 @@ class QuoteCalculator
     public static function project(array $project): array
     {
         $ownMaterial = $ownLabor = $subCost = $baseCost = $itemOffer = 0;
+        $offerMaterial = $offerLabor = 0;
         $categoryTotals = [];
 
         foreach ($project['categories'] ?? [] as $category) {
             if (! ($category['active'] ?? true)) {
                 continue;
             }
-            $ct = ['id' => $category['id'] ?? null, 'title' => $category['title'] ?? '', 'base' => 0, 'offer' => 0, 'profit' => 0];
+            $ct = [
+                'id' => $category['id'] ?? null,
+                'title' => $category['title'] ?? '',
+                'base' => 0,
+                'offer' => 0,
+                'offerMaterial' => 0,
+                'offerLabor' => 0,
+                'profit' => 0,
+            ];
             foreach ($category['items'] ?? [] as $item) {
                 if (! ($item['active'] ?? true)) {
                     continue;
@@ -125,8 +169,12 @@ class QuoteCalculator
                 $subCost += $c['subCost'];
                 $baseCost += $c['base'];
                 $itemOffer += $c['offer'];
+                $offerMaterial += $c['offerMaterial'];
+                $offerLabor += $c['offerLabor'];
                 $ct['base'] += $c['base'];
                 $ct['offer'] += $c['offer'];
+                $ct['offerMaterial'] += $c['offerMaterial'];
+                $ct['offerLabor'] += $c['offerLabor'];
                 $ct['profit'] += $c['profit'];
             }
             $categoryTotals[] = $ct;
@@ -142,17 +190,27 @@ class QuoteCalculator
         $gross = $netOffer + $vat;
         $profit = $netOffer - $baseCost;
 
+        // A projektszintű korrekciók (kedvezmény, tartalék, projektköltség,
+        // kerekítés) nem tételhez kötöttek, ezért a tételek anyag–díj arányában
+        // oszlanak szét — a maradék a díjra kerül, hogy a két szám összege
+        // pontosan a nettó ajánlati összeg legyen.
+        $netMaterial = $itemOffer !== 0 ? self::round($netOffer * $offerMaterial / $itemOffer) : 0;
+
         return [
             'ownMaterial' => $ownMaterial,
             'ownLabor' => $ownLabor,
             'subCost' => $subCost,
             'baseCost' => $baseCost,
             'itemOffer' => $itemOffer,
+            'offerMaterial' => $offerMaterial,
+            'offerLabor' => $offerLabor,
             'discount' => $discount,
             'contingency' => $contingency,
             'projectCost' => $projectCost,
             'rounding' => $rounding,
             'netOffer' => $netOffer,
+            'netMaterial' => $netMaterial,
+            'netLabor' => $netOffer - $netMaterial,
             'vat' => $vat,
             'grossOffer' => $gross,
             'profit' => $profit,
