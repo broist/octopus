@@ -37,6 +37,7 @@ import PageHeader from '@/Components/PageHeader';
 import ContextMenu, { type MenuEntry, type QuickAction } from '@/Pages/Documents/Partials/ContextMenu';
 import ConfirmDialog from '@/Pages/Documents/Partials/ConfirmDialog';
 import FolderTree from '@/Pages/Documents/Partials/FolderTree';
+import ImageLightbox from '@/Pages/Documents/Partials/ImageLightbox';
 import ItemView, { type ItemHandlers } from '@/Pages/Documents/Partials/ItemView';
 import MobileExplorer, { type MobileView } from '@/Pages/Documents/Partials/MobileExplorer';
 import MoveDialog from '@/Pages/Documents/Partials/MoveDialog';
@@ -167,6 +168,20 @@ export default function Index() {
             ),
         [folders, documents, sort],
     );
+
+    /* ---------------- képnézegető ---------------- */
+    // A mappa képei megjelenítési sorrendben — ezek között lapoz a nézegető.
+    const galleryImages = useMemo(
+        () =>
+            items
+                .filter(
+                    (i): i is Extract<ExplorerItem, { type: 'file' }> =>
+                        i.type === 'file' && i.row.is_image && i.row.preview_version_id !== null,
+                )
+                .map((i) => i.row),
+        [items],
+    );
+    const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
 
     /* ---------------- kijelölés ---------------- */
     const [selected, setSelected] = useState<Set<ItemKey>>(new Set());
@@ -410,7 +425,16 @@ export default function Index() {
 
     /* ---------------- műveletek ---------------- */
     const openItem = (item: ExplorerItem) => {
-        if (item.type === 'folder') visitFolder(item.row.id);
+        if (item.type === 'folder') {
+            visitFolder(item.row.id);
+
+            return;
+        }
+
+        // Kép: helyben nyílik a nézegető, a mappa többi képe között lapozhatóan.
+        // A többi fájl marad az adatlapon (verziók, jogosultságok, előzmények).
+        const galleryAt = galleryImages.findIndex((row) => row.id === item.row.id);
+        if (galleryAt !== -1) setGalleryIndex(galleryAt);
         else router.get(route('documents.show', item.row.id));
     };
 
@@ -1865,6 +1889,13 @@ export default function Index() {
                 categories={categories}
                 projects={projects}
                 onClose={() => setUpload(null)}
+            />
+
+            <ImageLightbox
+                images={galleryImages}
+                index={galleryIndex}
+                onIndex={setGalleryIndex}
+                onClose={() => setGalleryIndex(null)}
             />
         </>
     );

@@ -174,6 +174,9 @@ export interface ProjectDocumentRow {
     uploader_name: string | null;
     updated_at: string;
     client_visible: boolean;
+    is_image: boolean;
+    /** Kérhető-e bélyegkép (a megosztás-kijelölő fotóknál ezt mutatja). */
+    has_thumb: boolean;
 }
 
 // --- Ügyfélportál-megosztás (a projekt adatlapján) ---

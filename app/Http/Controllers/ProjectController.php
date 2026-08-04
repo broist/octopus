@@ -223,6 +223,11 @@ class ProjectController extends Controller
                 'uploader_name' => $d->uploader?->name,
                 'updated_at' => $d->updated_at->toIso8601String(),
                 'client_visible' => (bool) $d->client_visible,
+                // Az „Ügyfélportál" fül bélyegképpel mutatja a fotókat: fájlnév
+                // alapján nem lehet eldönteni, melyik képet osztjuk meg.
+                'is_image' => str_starts_with((string) $d->currentVersion?->mime_type, 'image/'),
+                'has_thumb' => $d->currentVersion !== null
+                    && \App\Services\Thumbnails::supports($d->currentVersion->mime_type),
             ])->values(),
             'clientSharing' => $this->clientSharingPayload($project),
             'statuses' => Project::STATUSES,
