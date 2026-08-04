@@ -14,7 +14,10 @@
       "Bash(git init *)",
       "Bash(git symbolic-ref *)",
       "Bash(git add *)",
-      "Bash(grep -v '\\\\.gitignore$')"
+      "Bash(grep -v '\\\\.gitignore$')",
+      "Bash(ls -la \"C:\\\\Users\\\\biroistvan\\\\OneDrive\\\\Asztali gép\\\\AcuWall\\\\Octopus\" | head -20)",
+      "Bash(xargs grep -l \"deadline\\\\|notifications\")",
+      "Bash(docker compose *)"
     ]
   }
 }
