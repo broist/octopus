@@ -54,11 +54,19 @@ export const EMPTY_FILTERS: Omit<TaskFilterState, 'hidden'> = {
 const selectClass =
     'w-full rounded-md border-line bg-white py-1.5 text-sm focus:border-accent focus:ring-accent/30';
 
+/**
+ * A legördülő panel. Telefonon a képernyő aljához tapadó lap (a gombhoz
+ * igazított, fix szélességű panel keskeny kijelzőn kilógna, és a hüvelykujjhoz
+ * is az alsó sáv esik közelebb), nagyobb képernyőn a gomb alá nyíló panel.
+ */
 const panelClass =
-    'absolute right-0 z-30 mt-2 origin-top-right rounded-xl border border-line bg-white p-3 shadow-lg focus:outline-none';
+    'z-30 rounded-xl border border-line bg-white p-3 shadow-lg focus:outline-none '
+    + 'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[75vh] max-sm:overflow-y-auto '
+    + 'max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-6 '
+    + 'sm:absolute sm:right-0 sm:mt-2 sm:origin-top-right';
 
 const triggerClass =
-    'flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink-soft transition hover:border-accent/40 hover:text-ink';
+    'flex items-center justify-center gap-1.5 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink-soft transition hover:border-accent/40 hover:text-ink max-sm:w-full';
 
 /* ------------------------------------------------------------------ */
 
@@ -184,10 +192,12 @@ export default function TaskToolbar({
               : `${value.hidden.length} állapot rejtve`;
 
     return (
-        <div className="o-card mb-5 p-3">
+        <div className="o-card mb-4 p-2.5 sm:mb-5 sm:p-3">
             <div className="flex flex-wrap items-center gap-2">
-                {/* Kereső */}
-                <div className="relative min-w-[200px] flex-1">
+                {/* Kereső — telefonon teljes szélességű, így a gombok a
+                    következő sorba tördelődnek (egy sorba zsúfolva mind
+                    használhatatlanul kicsi lenne). */}
+                <div className="relative w-full sm:w-auto sm:min-w-[200px] sm:flex-1">
                     <Search
                         size={16}
                         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
@@ -202,7 +212,7 @@ export default function TaskToolbar({
                 </div>
 
                 {/* Állapot: mit ne mutasson */}
-                <Popover className="relative">
+                <Popover className="relative max-sm:min-w-0 max-sm:flex-1">
                     <PopoverButton
                         className={clsx(
                             triggerClass,
@@ -210,11 +220,11 @@ export default function TaskToolbar({
                         )}
                         title="Válassza ki, mely állapotokat ne mutassa"
                     >
-                        <Eye size={15} className="text-ink-faint" />
-                        {hiddenLabel}
-                        <ChevronDown size={13} className="text-ink-faint" />
+                        <Eye size={15} className="shrink-0 text-ink-faint" />
+                        <span className="truncate">{hiddenLabel}</span>
+                        <ChevronDown size={13} className="shrink-0 text-ink-faint" />
                     </PopoverButton>
-                    <PopoverPanel className={clsx(panelClass, 'w-64')}>
+                    <PopoverPanel className={clsx(panelClass, 'sm:w-64')}>
                         <p className="px-1 pb-2 text-xs text-ink-faint">
                             Pipálja be, amelyik állapotot <b>nem</b> szeretné látni.
                         </p>
@@ -257,20 +267,20 @@ export default function TaskToolbar({
                 </Popover>
 
                 {/* További szűrők egy helyen */}
-                <Popover className="relative">
+                <Popover className="relative max-sm:min-w-0 max-sm:flex-1">
                     <PopoverButton
                         className={clsx(triggerClass, activeExtra > 0 && 'border-accent/40 text-ink')}
                     >
-                        <SlidersHorizontal size={15} className="text-ink-faint" />
+                        <SlidersHorizontal size={15} className="shrink-0 text-ink-faint" />
                         Szűrők
                         {activeExtra > 0 && (
                             <span className="rounded-sm bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-white">
                                 {activeExtra}
                             </span>
                         )}
-                        <ChevronDown size={13} className="text-ink-faint" />
+                        <ChevronDown size={13} className="shrink-0 text-ink-faint" />
                     </PopoverButton>
-                    <PopoverPanel className={clsx(panelClass, 'w-[22rem] space-y-3')}>
+                    <PopoverPanel className={clsx(panelClass, 'space-y-3 sm:w-[22rem]')}>
                         {/* Hatókör */}
                         <div>
                             <p className="mb-1 text-xs font-medium text-ink-faint">Hatókör</p>
@@ -418,12 +428,39 @@ export default function TaskToolbar({
                     </PopoverPanel>
                 </Popover>
 
+                {/* Nézetváltó — a kanban az elsődleges. Telefonon csak ikon,
+                    hogy a gombsor egy sorban maradjon. */}
+                <div className="flex shrink-0 rounded-md border border-line bg-white p-0.5">
+                    <button
+                        onClick={() => onViewChange('kanban')}
+                        aria-label="Kanban nézet"
+                        className={clsx(
+                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition max-sm:py-2',
+                            view === 'kanban' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
+                        )}
+                    >
+                        <Columns3 size={14} />
+                        <span className="max-sm:hidden">Kanban</span>
+                    </button>
+                    <button
+                        onClick={() => onViewChange('list')}
+                        aria-label="Listás nézet"
+                        className={clsx(
+                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition max-sm:py-2',
+                            view === 'list' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
+                        )}
+                    >
+                        <List size={14} />
+                        <span className="max-sm:hidden">Lista</span>
+                    </button>
+                </div>
+
                 {/* Rendezés csak listanézetben (a kanbanban a státusz rendez) */}
                 {view === 'list' && (
                     <select
                         value={sort}
                         onChange={(e) => onSortChange(e.target.value as SortKey)}
-                        className="rounded-md border-line bg-white py-2 text-sm focus:border-accent focus:ring-accent/30 lg:w-56"
+                        className="w-full rounded-md border-line bg-white py-2 text-sm focus:border-accent focus:ring-accent/30 sm:w-auto lg:w-56"
                         title="Rendezés"
                     >
                         {SORT_OPTIONS.map((o) => (
@@ -433,30 +470,6 @@ export default function TaskToolbar({
                         ))}
                     </select>
                 )}
-
-                {/* Nézetváltó — a kanban az elsődleges */}
-                <div className="flex rounded-md border border-line bg-white p-0.5">
-                    <button
-                        onClick={() => onViewChange('kanban')}
-                        className={clsx(
-                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition',
-                            view === 'kanban' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                        )}
-                    >
-                        <Columns3 size={14} />
-                        Kanban
-                    </button>
-                    <button
-                        onClick={() => onViewChange('list')}
-                        className={clsx(
-                            'flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition',
-                            view === 'list' ? 'bg-accent text-white' : 'text-ink-soft hover:text-ink',
-                        )}
-                    >
-                        <List size={14} />
-                        Lista
-                    </button>
-                </div>
             </div>
 
             {/* Aktív szűrők chipként */}

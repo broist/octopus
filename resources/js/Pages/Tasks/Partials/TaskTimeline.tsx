@@ -84,7 +84,9 @@ export default function TaskTimeline({
                 )}
             </h3>
 
-            <div className="mt-3 max-h-72 space-y-3 overflow-y-auto pr-1">
+            {/* Telefonon nincs belső görgetés: az ablak maga görög, a dobozba
+                zárt görgetés ujjal nehezen célozható. */}
+            <div className="mt-3 space-y-3 pr-1 sm:max-h-72 sm:overflow-y-auto">
                 {loading ? (
                     <p className="text-xs text-ink-faint">Betöltés…</p>
                 ) : entries.length === 0 ? (
@@ -114,19 +116,22 @@ export default function TaskTimeline({
                         }
                     }}
                     rows={2}
-                    placeholder="Hozzászólás írása… (Ctrl+Enter a küldéshez)"
+                    placeholder="Hozzászólás írása…"
                     className="block w-full rounded-md border-line bg-white text-sm shadow-sm focus:border-accent focus:ring-accent/40"
                 />
                 <button
                     type="button"
                     onClick={submit}
                     disabled={body.trim() === '' || sending}
-                    className="btn-primary shrink-0"
-                    title="Hozzászólás küldése"
+                    className="btn-primary shrink-0 max-sm:h-[46px] max-sm:px-4"
+                    title="Hozzászólás küldése (Ctrl+Enter)"
                 >
                     <Send size={15} />
                 </button>
             </div>
+            <p className="mt-1.5 text-[11px] text-ink-faint">
+                A feladat felelősei harang- és e-mail értesítést kapnak a hozzászólásról.
+            </p>
         </div>
     );
 }

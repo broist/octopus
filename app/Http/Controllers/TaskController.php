@@ -9,9 +9,11 @@ use App\Models\Task;
 use App\Models\TaskAttachment;
 use App\Models\TaskComment;
 use App\Models\User;
+use App\Notifications\TaskCommented;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -89,41 +91,31 @@ class TaskController extends Controller
                 ->where('status', $status)->count();
         }
 
-        $tasks = $applyState($applyScope($applyFilters(Task::query())))
+        $withRelations = fn ($q) => $q
             ->with(['project:id,code,name', 'assignees:id,name', 'creator:id,name', 'attachments'])
-            ->withCount(['comments as comments_count' => fn ($q) => $q->where('kind', TaskComment::KIND_COMMENT)])
+            ->withCount(['comments as comments_count' => fn ($q) => $q->where('kind', TaskComment::KIND_COMMENT)]);
+
+        $tasks = $withRelations($applyState($applyScope($applyFilters(Task::query()))))
             ->orderByRaw("case priority when 'magas' then 0 when 'kozepes' then 1 else 2 end")
             ->orderByRaw('due_on asc nulls last')
             ->orderBy('id')
             ->get()
-            ->map(fn (Task $t) => [
-                'id' => $t->id,
-                'title' => $t->title,
-                'description' => $t->description,
-                'status' => $t->status,
-                'priority' => $t->priority,
-                'due_on' => $t->due_on?->toDateString(),
-                'is_overdue' => $t->isOverdue(),
-                'project' => $t->project
-                    ? ['id' => $t->project->id, 'code' => $t->project->code, 'name' => $t->project->name]
-                    : null,
-                'assignees' => $t->assignees->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
-                'creator' => $t->creator ? ['id' => $t->creator->id, 'name' => $t->creator->name] : null,
-                'created_at' => $t->created_at->toIso8601String(),
-                'can_move' => $t->canBeMovedBy($request->user()),
-                'completed_at' => $t->completed_at?->toIso8601String(),
-                'comments_count' => (int) $t->comments_count,
-                'attachments' => $t->attachments->map(fn (TaskAttachment $a) => [
-                    'id' => $a->id,
-                    'name' => $a->original_filename,
-                    'size' => $a->size_bytes,
-                    'is_image' => $a->isImage(),
-                    'url' => route('tasks.attachments.download', $a->id),
-                ])->values(),
-            ]);
+            ->map(fn (Task $t) => $this->taskPayload($t, $request->user()));
+
+        // Mélylink egy konkrét feladatra (értesítésből érkezve): a lista
+        // automatikusan megnyitja. Ha a szűrők kiejtenék, akkor is bevesszük —
+        // különben az értesítésre kattintva üres oldal fogadná a felhasználót.
+        $openTaskId = $request->integer('task');
+        if ($openTaskId > 0 && ! $tasks->contains(fn ($t) => $t['id'] === $openTaskId)) {
+            $extra = $withRelations(Task::query())->find($openTaskId);
+            if ($extra) {
+                $tasks = $tasks->prepend($this->taskPayload($extra, $request->user()));
+            }
+        }
 
         return Inertia::render('Tasks/Index', [
-            'tasks' => $tasks,
+            'tasks' => $tasks->values(),
+            'openTaskId' => $openTaskId ?: null,
             'filters' => [
                 'search' => $search,
                 'project' => $projectId ?: null,
@@ -147,6 +139,40 @@ class TaskController extends Controller
             'projects' => Project::orderBy('code')->get(['id', 'code', 'name'])
                 ->map(fn ($p) => ['id' => $p->id, 'label' => "{$p->code} – {$p->name}"])->values(),
         ]);
+    }
+
+    /**
+     * Egy feladat sora a listának/kanbannak.
+     *
+     * @return array<string, mixed>
+     */
+    private function taskPayload(Task $t, User $viewer): array
+    {
+        return [
+            'id' => $t->id,
+            'title' => $t->title,
+            'description' => $t->description,
+            'status' => $t->status,
+            'priority' => $t->priority,
+            'due_on' => $t->due_on?->toDateString(),
+            'is_overdue' => $t->isOverdue(),
+            'project' => $t->project
+                ? ['id' => $t->project->id, 'code' => $t->project->code, 'name' => $t->project->name]
+                : null,
+            'assignees' => $t->assignees->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+            'creator' => $t->creator ? ['id' => $t->creator->id, 'name' => $t->creator->name] : null,
+            'created_at' => $t->created_at->toIso8601String(),
+            'can_move' => $t->canBeMovedBy($viewer),
+            'completed_at' => $t->completed_at?->toIso8601String(),
+            'comments_count' => (int) $t->comments_count,
+            'attachments' => $t->attachments->map(fn (TaskAttachment $a) => [
+                'id' => $a->id,
+                'name' => $a->original_filename,
+                'size' => $a->size_bytes,
+                'is_image' => $a->isImage(),
+                'url' => route('tasks.attachments.download', $a->id),
+            ])->values(),
+        ];
     }
 
     public function store(TaskRequest $request): RedirectResponse
@@ -261,13 +287,36 @@ class TaskController extends Controller
             'body' => ['required', 'string', 'max:5000'],
         ]);
 
-        $task->comments()->create([
+        $comment = $task->comments()->create([
             'user_id' => $request->user()->id,
             'kind' => TaskComment::KIND_COMMENT,
             'body' => trim($data['body']),
         ]);
 
+        $this->notifyCommentRecipients($task, $comment, $request->user());
+
         return back(); // az idővonalat a modal tölti újra
+    }
+
+    /**
+     * Hozzászólás után a feladat felelősei (és a létrehozója) harang- és
+     * e-mail értesítést kapnak — a hozzászólót kihagyva, hiszen ő írta.
+     */
+    private function notifyCommentRecipients(Task $task, TaskComment $comment, User $author): void
+    {
+        $task->load(['assignees', 'creator', 'project:id,code,name']);
+
+        $recipients = $task->assignees
+            ->concat([$task->creator])
+            ->filter()
+            ->unique('id')
+            ->reject(fn (User $u) => $u->id === $author->id)
+            ->reject(fn (User $u) => ! $u->is_active || $u->is_external)
+            ->values();
+
+        if ($recipients->isNotEmpty()) {
+            Notification::send($recipients, new TaskCommented($task, $comment, $author->name));
+        }
     }
 
     /** Hozzászólás törlése: a saját bejegyzését bárki, másét a tasks.delete jog. */

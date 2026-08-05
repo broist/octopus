@@ -26,6 +26,7 @@ import InputLabel from '@/Components/ui/InputLabel';
 import TextInput from '@/Components/ui/TextInput';
 import InputError from '@/Components/ui/InputError';
 import { usePageProps } from '@/hooks/usePageProps';
+import { useIsMobile, useIsTouch } from '@/hooks/useMediaQuery';
 import { fmtBytes, fmtDate, fmtDateTime } from '@/lib/format';
 import type {
     Option,
@@ -38,6 +39,8 @@ import type {
 
 interface IndexProps extends Record<string, unknown> {
     tasks: TaskItem[];
+    /** Értesítésből érkezve: ezt a feladatot nyissa meg azonnal. */
+    openTaskId: number | null;
     filters: {
         search: string;
         project: number | null;
@@ -182,21 +185,41 @@ function TaskModal({
     return (
         <Dialog open onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
-            <div className="fixed inset-0 flex justify-center overflow-y-auto p-3 sm:p-4">
-                <DialogPanel className={clsx('o-card m-auto w-full p-4 sm:p-6', task ? 'max-w-2xl' : 'max-w-lg')}>
-                    <DialogTitle className="text-lg font-semibold text-sidebar">
-                        {task ? 'Feladat szerkesztése' : 'Új feladat'}
-                    </DialogTitle>
-
-                    {/* Létrehozó + dátum (szerkesztéskor) */}
-                    {task && task.creator && (
-                        <p className="mt-1 text-xs text-ink-faint">
-                            Létrehozta: <span className="font-medium text-ink-soft">{task.creator.name}</span> ·{' '}
-                            {fmtDateTime(task.created_at)}
-                        </p>
+            {/* Telefonon teljes képernyős lap (a kis, középre úsztatott ablak
+                billentyűzet mellett használhatatlan), tableten felfelé kártya. */}
+            <div className="fixed inset-0 flex justify-center overflow-y-auto sm:p-4">
+                <DialogPanel
+                    className={clsx(
+                        'o-card w-full rounded-none p-4 max-sm:min-h-full sm:m-auto sm:rounded-card sm:p-6',
+                        task ? 'sm:max-w-2xl' : 'sm:max-w-lg',
                     )}
+                >
+                    <div className="-mx-4 -mt-4 mb-4 flex items-start gap-2 border-b border-line bg-white px-4 py-3 max-sm:sticky max-sm:top-0 max-sm:z-10 sm:-mx-6 sm:-mt-6 sm:px-6">
+                        <div className="min-w-0 flex-1">
+                            <DialogTitle className="text-lg font-semibold text-sidebar">
+                                {task ? 'Feladat szerkesztése' : 'Új feladat'}
+                            </DialogTitle>
 
-                    <form onSubmit={submit} className="mt-4 space-y-4">
+                            {/* Létrehozó + dátum (szerkesztéskor) */}
+                            {task && task.creator && (
+                                <p className="mt-0.5 text-xs text-ink-faint">
+                                    Létrehozta:{' '}
+                                    <span className="font-medium text-ink-soft">{task.creator.name}</span> ·{' '}
+                                    {fmtDateTime(task.created_at)}
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="Bezárás"
+                            className="-mr-1 shrink-0 rounded-lg p-2 text-ink-faint hover:bg-cream hover:text-ink"
+                        >
+                            <X size={18} />
+                        </button>
+                    </div>
+
+                    <form onSubmit={submit} className="space-y-4">
                         <div>
                             <InputLabel value="Cím *" />
                             <TextInput
@@ -276,21 +299,31 @@ function TaskModal({
 
                         <div>
                             <InputLabel value="Felelős(ök) *" />
-                            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1.5">
-                                {users.map((u) => (
-                                    <label
-                                        key={u.id}
-                                        className="flex items-center gap-1.5 text-sm text-ink-soft"
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={form.data.assignees.includes(u.id)}
-                                            onChange={() => toggleAssignee(u.id)}
-                                            className="rounded-sm border-line text-accent focus:ring-accent/40"
-                                        />
-                                        {u.name}
-                                    </label>
-                                ))}
+                            {/* Telefonon két oszlop, nagyobb találati felülettel —
+                                a sűrű, sorba tördelt pipasor ujjal alig fogható. */}
+                            <div className="mt-1 grid grid-cols-2 gap-1 sm:grid-cols-3">
+                                {users.map((u) => {
+                                    const checked = form.data.assignees.includes(u.id);
+                                    return (
+                                        <label
+                                            key={u.id}
+                                            className={clsx(
+                                                'flex cursor-pointer items-center gap-2 rounded-md border px-2 py-2 text-sm transition',
+                                                checked
+                                                    ? 'border-accent/40 bg-accent-50/50 text-ink'
+                                                    : 'border-line text-ink-soft',
+                                            )}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => toggleAssignee(u.id)}
+                                                className="shrink-0 rounded-sm border-line text-accent focus:ring-accent/40"
+                                            />
+                                            <span className="truncate">{u.name}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                             <InputError message={form.errors.assignees} />
                         </div>
@@ -391,10 +424,12 @@ function TaskModal({
                             </p>
                         )}
 
-                        <div className="flex items-center gap-2 border-t border-line pt-4">
+                        {/* Telefonon a mentősáv az aljára tapad, hogy hosszú
+                            űrlapnál se kelljen a gombig görgetni. */}
+                        <div className="-mx-4 flex items-center gap-2 border-t border-line bg-white px-4 py-3 max-sm:sticky max-sm:bottom-0 sm:mx-0 sm:px-0 sm:pb-0">
                             <button
                                 type="submit"
-                                className="btn-primary"
+                                className="btn-primary max-sm:flex-1 max-sm:justify-center"
                                 disabled={form.processing || !isValid}
                             >
                                 {task ? 'Mentés' : 'Feladat létrehozása'}
@@ -433,15 +468,26 @@ function TaskModal({
 function TaskCard({
     task,
     priorities,
+    statuses,
+    showStatusSwitch,
+    showStatusChip,
     onOpen,
+    onMove,
 }: {
     task: TaskItem;
     priorities: Record<string, string>;
+    statuses: Record<string, string>;
+    /** Érintőképernyőn a húzás helyett gombokkal váltunk státuszt. */
+    showStatusSwitch: boolean;
+    /** Listás nézetben a státusz nem derül ki az oszlopból — ki kell írni. */
+    showStatusChip?: boolean;
     onOpen: () => void;
+    onMove: (status: TaskStatus) => void;
 }) {
     return (
-        <button
-            type="button"
+        // A kártya egésze kattintható, de a nyitást a cím gombja végzi: így a
+        // státuszváltó gombok nem kerülnek egy gombon belülre.
+        <div
             draggable={task.can_move}
             onDragStart={(e) => {
                 e.dataTransfer.setData('text/plain', String(task.id));
@@ -449,69 +495,105 @@ function TaskCard({
             }}
             onClick={onOpen}
             className={clsx(
-                'o-card w-full p-3 text-left transition hover:border-accent/40',
-                task.can_move && 'cursor-grab active:cursor-grabbing',
+                'o-card w-full cursor-pointer p-3 text-left transition hover:border-accent/40',
+                task.can_move && 'lg:cursor-grab lg:active:cursor-grabbing',
             )}
         >
             <div className="flex items-start justify-between gap-2">
-                <span
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onOpen();
+                    }}
                     className={clsx(
-                        'text-sm font-medium leading-snug',
+                        'text-left text-sm font-medium leading-snug',
                         task.status === 'kesz' ? 'text-ink-faint line-through' : 'text-ink',
                     )}
                 >
                     {task.title}
-                </span>
+                </button>
                 <span className={clsx('chip shrink-0', PRIORITY_CHIP[task.priority])}>
                     {priorities[task.priority]}
                 </span>
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-                    {task.project ? (
-                        <span className="font-mono">{task.project.code}</span>
-                    ) : (
-                        <span className="chip bg-sidebar/10 text-[10px] text-sidebar">Belső</span>
-                    )}
-                    {task.due_on && (
-                        <span
-                            className={clsx(
-                                'flex items-center gap-1',
-                                task.is_overdue && 'font-medium text-coral',
-                            )}
-                        >
-                            <CalendarClock size={12} />
-                            {fmtDate(task.due_on)}
-                        </span>
-                    )}
-                    {task.attachments.length > 0 && (
-                        <span className="flex items-center gap-1">
-                            <Paperclip size={11} />
-                            {task.attachments.length}
-                        </span>
-                    )}
-                    {task.comments_count > 0 && (
-                        <span className="flex items-center gap-1" title="Hozzászólások">
-                            <MessageSquare size={11} />
-                            {task.comments_count}
-                        </span>
-                    )}
-                </div>
+                {showStatusChip && (
+                    <span className="chip chip-grey whitespace-nowrap">{statuses[task.status]}</span>
+                )}
+                {task.project ? (
+                    <span className="font-mono">{task.project.code}</span>
+                ) : (
+                    <span className="chip bg-sidebar/10 text-[10px] text-sidebar">Belső</span>
+                )}
+                {task.due_on && (
+                    <span
+                        className={clsx(
+                            'flex items-center gap-1',
+                            task.is_overdue && 'font-medium text-coral',
+                        )}
+                    >
+                        <CalendarClock size={12} />
+                        {fmtDate(task.due_on)}
+                    </span>
+                )}
+                {task.attachments.length > 0 && (
+                    <span className="flex items-center gap-1">
+                        <Paperclip size={11} />
+                        {task.attachments.length}
+                    </span>
+                )}
+                {task.comments_count > 0 && (
+                    <span className="flex items-center gap-1" title="Hozzászólások">
+                        <MessageSquare size={11} />
+                        {task.comments_count}
+                    </span>
+                )}
+            </div>
 
             {task.assignees.length > 0 && (
-                <div className="mt-2 flex -space-x-1.5">
+                <div className="mt-2 flex flex-wrap items-center gap-1">
                     {task.assignees.map((a) => (
                         <span
                             key={a.id}
-                            title={a.name}
-                            className="flex h-6 w-6 items-center justify-center rounded-md border border-white bg-accent text-[10px] font-semibold text-white"
+                            className="flex items-center gap-1 rounded-md bg-cream px-1.5 py-0.5 text-[11px] text-ink-soft"
                         >
-                            {initials(a.name)}
+                            <span className="flex h-4 w-4 items-center justify-center rounded-sm bg-accent text-[9px] font-semibold text-white">
+                                {initials(a.name)}
+                            </span>
+                            {a.name}
                         </span>
                     ))}
                 </div>
             )}
-        </button>
+
+            {/* Érintőképernyőn a kanban-húzás nem működik: a státuszváltás
+                gombsorral történik, elég nagy találati felülettel. */}
+            {showStatusSwitch && task.can_move && (
+                <div className="mt-2.5 flex gap-1 border-t border-line pt-2.5">
+                    {STATUS_ORDER.map((s) => (
+                        <button
+                            key={s}
+                            type="button"
+                            disabled={s === task.status}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onMove(s);
+                            }}
+                            className={clsx(
+                                'flex-1 rounded-md px-1 py-2 text-xs font-medium transition',
+                                s === task.status
+                                    ? 'bg-accent text-white'
+                                    : 'border border-line text-ink-soft active:bg-cream',
+                            )}
+                        >
+                            {statuses[s]}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -522,6 +604,7 @@ function TaskCard({
 export default function Index() {
     const {
         tasks,
+        openTaskId,
         filters,
         scopeCounts,
         statusCounts,
@@ -536,6 +619,9 @@ export default function Index() {
     const canCreate = auth.permissions.includes('tasks.create');
     const canDelete = auth.permissions.includes('tasks.delete');
 
+    const isMobile = useIsMobile();
+    const isTouch = useIsTouch();
+
     // A kanban az elsődleges nézet; a választás felhasználónként megmarad.
     const [view, setView] = useState<'kanban' | 'list'>(
         () => (localStorage.getItem(VIEW_STORAGE_KEY) as 'kanban' | 'list') || 'kanban',
@@ -543,6 +629,9 @@ export default function Index() {
     const [sort, setSort] = useState<SortKey>('due_asc');
     const [modal, setModal] = useState<{ task: TaskItem | null; status: TaskStatus } | null>(null);
     const [dragOver, setDragOver] = useState<TaskStatus | null>(null);
+
+    /** Telefonon egyszerre egy kanban-oszlop fér el — köztük füllel váltunk. */
+    const [mobileColumn, setMobileColumn] = useState<TaskStatus>('teendo');
 
     const [f, setF] = useState<TaskFilterState>({
         search: filters.search,
@@ -567,6 +656,17 @@ export default function Index() {
     const showDone = !f.hidden.includes('kesz');
     const visibleStatuses = STATUS_ORDER.filter((s) => !f.hidden.includes(s));
     const hiddenStatuses = STATUS_ORDER.filter((s) => f.hidden.includes(s));
+
+    // Ha a kiválasztott mobil-oszlopot közben elrejtették, az első láthatóra esünk vissza.
+    const activeColumn = visibleStatuses.includes(mobileColumn)
+        ? mobileColumn
+        : (visibleStatuses[0] ?? 'teendo');
+    const kanbanColumns = isMobile
+        ? visibleStatuses.length > 0
+            ? [activeColumn]
+            : []
+        : visibleStatuses;
+    const showMobileTabs = isMobile && visibleStatuses.length > 1;
 
     const resetFilters = () => setF({ ...EMPTY_FILTERS, hidden: [] });
 
@@ -627,15 +727,29 @@ export default function Index() {
         }
     }, [tasks, sort]);
 
+    const move = (task: TaskItem, status: TaskStatus) => {
+        if (task.status === status || !task.can_move) return;
+        router.put(route('tasks.status', task.id), { status }, { preserveScroll: true });
+    };
+
     const drop = (status: TaskStatus, e: React.DragEvent) => {
         e.preventDefault();
         setDragOver(null);
         const id = Number(e.dataTransfer.getData('text/plain'));
         const task = tasks.find((t) => t.id === id);
-        if (task && task.status !== status && task.can_move) {
-            router.put(route('tasks.status', id), { status }, { preserveScroll: true });
-        }
+        if (task) move(task, status);
     };
+
+    // Értesítésből érkezve (…/tasks?task=12) rögtön a feladat ablaka nyíljon.
+    const openedDeepLink = useRef(false);
+    useEffect(() => {
+        if (openedDeepLink.current || !openTaskId) return;
+        const task = tasks.find((t) => t.id === openTaskId);
+        if (task) {
+            openedDeepLink.current = true;
+            setModal({ task, status: task.status });
+        }
+    }, [openTaskId, tasks]);
 
     const hasOtherFilters = !!(
         filters.search ||
@@ -710,66 +824,48 @@ export default function Index() {
                     <p className="mt-1 max-w-sm text-sm text-ink-soft">{emptyStateText}</p>
                 </div>
             ) : view === 'kanban' ? (
-                <div
-                    className={clsx(
-                        'grid grid-cols-1 gap-4',
-                        visibleStatuses.length === 1 && 'md:grid-cols-1',
-                        visibleStatuses.length === 2 && 'md:grid-cols-2',
-                        visibleStatuses.length >= 3 && 'md:grid-cols-3',
-                    )}
-                >
-                    {visibleStatuses.map((status) => {
-                        const column = tasks.filter((t) => t.status === status);
-                        return (
-                            <div
-                                key={status}
-                                onDragOver={(e) => {
-                                    e.preventDefault();
-                                    setDragOver(status);
-                                }}
-                                onDragLeave={() => setDragOver(null)}
-                                onDrop={(e) => drop(status, e)}
-                                className={clsx(
-                                    'rounded-card border bg-cream/60 p-3 transition',
-                                    dragOver === status ? 'border-accent bg-accent-50' : 'border-line',
-                                )}
-                            >
-                                <div className="mb-3 flex items-center justify-between px-1">
-                                    <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
-                                        {statuses[status]}
-                                    </h2>
-                                    <span className="rounded-sm bg-white px-1.5 py-0.5 text-xs font-medium text-ink-faint">
-                                        {column.length}
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    {column.map((task) => (
-                                        <TaskCard
-                                            key={task.id}
-                                            task={task}
-                                            priorities={priorities}
-                                            onOpen={() => setModal({ task, status })}
-                                        />
-                                    ))}
-                                    {canCreate && (
-                                        <button
-                                            onClick={() => setModal({ task: null, status })}
-                                            className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-line py-2 text-xs text-ink-faint transition hover:border-accent/40 hover:text-accent"
-                                        >
-                                            <Plus size={13} />
-                                            Feladat ide
-                                        </button>
+                <>
+                    {/* Telefonon egyszerre egy oszlopot mutatunk: három egymás
+                        alá tett oszlop végtelen görgetés lenne. */}
+                    {showMobileTabs && (
+                        <div className="mb-3 flex gap-1 rounded-card border border-line bg-white p-1">
+                            {visibleStatuses.map((s) => (
+                                <button
+                                    key={s}
+                                    onClick={() => setMobileColumn(s)}
+                                    className={clsx(
+                                        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition',
+                                        s === activeColumn
+                                            ? 'bg-accent text-white'
+                                            : 'text-ink-soft active:bg-cream',
                                     )}
-                                </div>
-                            </div>
-                        );
-                    })}
+                                >
+                                    {statuses[s]}
+                                    <span
+                                        className={clsx(
+                                            'rounded-sm px-1 text-[10px]',
+                                            s === activeColumn
+                                                ? 'bg-white/20'
+                                                : 'bg-cream text-ink-faint',
+                                        )}
+                                    >
+                                        {tasks.filter((t) => t.status === s).length}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
-                    {/* Elrejtett állapotok: keskeny ledobó sáv, hogy a húzással
-                        való státuszváltás (pl. lezárás) elrejtve is működjön. */}
-                    {hiddenStatuses.length > 0 && (
-                        <div className="flex gap-2 md:col-span-full">
-                            {hiddenStatuses.map((status) => (
+                    <div
+                        className={clsx(
+                            'grid grid-cols-1 gap-4',
+                            visibleStatuses.length === 2 && 'lg:grid-cols-2',
+                            visibleStatuses.length >= 3 && 'lg:grid-cols-3',
+                        )}
+                    >
+                        {kanbanColumns.map((status) => {
+                            const column = tasks.filter((t) => t.status === status);
+                            return (
                                 <div
                                     key={status}
                                     onDragOver={(e) => {
@@ -779,19 +875,101 @@ export default function Index() {
                                     onDragLeave={() => setDragOver(null)}
                                     onDrop={(e) => drop(status, e)}
                                     className={clsx(
-                                        'flex flex-1 items-center justify-center gap-1.5 rounded-card border border-dashed py-2 text-xs transition',
+                                        'rounded-card border bg-cream/60 transition',
+                                        isMobile ? 'border-transparent bg-transparent' : 'p-3',
                                         dragOver === status
-                                            ? 'border-accent bg-accent-50 text-accent'
-                                            : 'border-line text-ink-faint',
+                                            ? 'border-accent bg-accent-50'
+                                            : !isMobile && 'border-line',
                                     )}
                                 >
-                                    <EyeOff size={13} />
-                                    {statuses[status]} (rejtve, {statusCounts[status] ?? 0}) — húzza
-                                    ide az áthelyezéshez
+                                    {/* Telefonon a fejlécet a fülsor helyettesíti — ha
+                                        nincs fülsor (egyetlen látható állapot), marad. */}
+                                    {!showMobileTabs && (
+                                        <div className="mb-3 flex items-center justify-between px-1">
+                                            <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+                                                {statuses[status]}
+                                            </h2>
+                                            <span className="rounded-sm bg-white px-1.5 py-0.5 text-xs font-medium text-ink-faint">
+                                                {column.length}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="space-y-2">
+                                        {column.map((task) => (
+                                            <TaskCard
+                                                key={task.id}
+                                                task={task}
+                                                priorities={priorities}
+                                                statuses={statuses}
+                                                showStatusSwitch={isTouch}
+                                                onOpen={() => setModal({ task, status })}
+                                                onMove={(s) => move(task, s)}
+                                            />
+                                        ))}
+                                        {column.length === 0 && (
+                                            <p className="px-1 py-4 text-center text-xs text-ink-faint">
+                                                Nincs feladat ebben az állapotban.
+                                            </p>
+                                        )}
+                                        {canCreate && (
+                                            <button
+                                                onClick={() => setModal({ task: null, status })}
+                                                className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-line py-2.5 text-xs text-ink-faint transition hover:border-accent/40 hover:text-accent"
+                                            >
+                                                <Plus size={13} />
+                                                Feladat ide
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                            );
+                        })}
+
+                        {/* Elrejtett állapotok: keskeny ledobó sáv, hogy a húzással
+                            való státuszváltás (pl. lezárás) elrejtve is működjön.
+                            Érintésre nincs húzás — ott a kártya gombsora old meg. */}
+                        {hiddenStatuses.length > 0 && !isMobile && (
+                            <div className="flex gap-2 lg:col-span-full">
+                                {hiddenStatuses.map((status) => (
+                                    <div
+                                        key={status}
+                                        onDragOver={(e) => {
+                                            e.preventDefault();
+                                            setDragOver(status);
+                                        }}
+                                        onDragLeave={() => setDragOver(null)}
+                                        onDrop={(e) => drop(status, e)}
+                                        className={clsx(
+                                            'flex flex-1 items-center justify-center gap-1.5 rounded-card border border-dashed py-2 text-xs transition',
+                                            dragOver === status
+                                                ? 'border-accent bg-accent-50 text-accent'
+                                                : 'border-line text-ink-faint',
+                                        )}
+                                    >
+                                        <EyeOff size={13} />
+                                        {statuses[status]} (rejtve, {statusCounts[status] ?? 0}) —
+                                        húzza ide az áthelyezéshez
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </>
+            ) : isMobile ? (
+                /* Listás nézet telefonon: kártyák, mert a táblázat kilóg. */
+                <div className="space-y-2">
+                    {sortedTasks.map((task) => (
+                        <TaskCard
+                            key={task.id}
+                            task={task}
+                            priorities={priorities}
+                            statuses={statuses}
+                            showStatusSwitch={isTouch}
+                            showStatusChip
+                            onOpen={() => setModal({ task, status: task.status })}
+                            onMove={(s) => move(task, s)}
+                        />
+                    ))}
                 </div>
             ) : (
                 /* Listás nézet — oszlopfejlécekkel */
