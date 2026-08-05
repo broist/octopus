@@ -93,7 +93,7 @@ function UserModal({
         <Dialog open onClose={onClose} className="relative z-50">
             <DialogBackdrop className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
             <div className="fixed inset-0 flex justify-center overflow-y-auto p-3 sm:p-4">
-                <DialogPanel className="o-card w-full max-w-lg p-4 sm:p-6">
+                <DialogPanel className="o-card m-auto w-full max-w-lg p-4 sm:p-6">
                     <DialogTitle className="text-lg font-semibold text-sidebar">
                         {user ? 'Munkatárs szerkesztése' : 'Új munkatárs'}
                     </DialogTitle>
