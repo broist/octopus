@@ -189,8 +189,12 @@ function TaskModal({
                 billentyűzet mellett használhatatlan), tableten felfelé kártya. */}
             <div className="fixed inset-0 flex justify-center overflow-y-auto sm:p-4">
                 <DialogPanel
+                    // Az `m-auto` telefonon is kell: enélkül a panel a rugalmas
+                    // tároló nyújtása miatt pont képernyőnyi magas lenne, a
+                    // hosszabb tartalom kilógna belőle — és a háttér csak a
+                    // doboz magasságáig festődne (alatta átlátszó sáv).
                     className={clsx(
-                        'o-card w-full rounded-none p-4 max-sm:min-h-full sm:m-auto sm:rounded-card sm:p-6',
+                        'o-card m-auto w-full rounded-none p-4 max-sm:min-h-full sm:rounded-card sm:p-6',
                         task ? 'sm:max-w-2xl' : 'sm:max-w-lg',
                     )}
                 >
