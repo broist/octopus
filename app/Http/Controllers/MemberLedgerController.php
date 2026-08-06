@@ -434,19 +434,54 @@ class MemberLedgerController extends Controller
     {
         $data = $this->validateRecurring($request);
 
-        RecurringSharedCost::create([
+        $recurring = RecurringSharedCost::create([
             ...$this->recurringAttributes($data),
             'created_by' => $request->user()->id,
         ]);
 
-        return back()->with('success', 'Ismétlődő költség létrehozva.');
+        return back()->with('success', 'Ismétlődő költség létrehozva.'.$this->generatedSuffix($recurring));
     }
 
     public function updateRecurring(Request $request, RecurringSharedCost $recurring): RedirectResponse
     {
         $recurring->update($this->recurringAttributes($this->validateRecurring($request)));
 
-        return back()->with('success', 'Ismétlődő költség módosítva.');
+        return back()->with('success', 'Ismétlődő költség módosítva.'.$this->generatedSuffix($recurring));
+    }
+
+    /**
+     * Mentés után azonnal legyártjuk az esedékes tételeket, hogy az ismétlődő
+     * költség rögtön látsszon a nyilvántartásban — ne csak a következő
+     * beolvasáskor (ütemező vagy „Beolvasás” gomb). Idempotens: ami már
+     * megvan, nem készül el újra.
+     *
+     * Ha nem keletkezett semmi, megmondjuk, miért — különben úgy tűnne, mintha
+     * a mentés nem működött volna.
+     */
+    private function generatedSuffix(RecurringSharedCost $recurring): string
+    {
+        $created = $this->ingestor->generateRecurring();
+
+        if ($created === 1) {
+            return ' Az esedékes tétel bekerült a nyilvántartásba.';
+        }
+
+        if ($created > 1) {
+            return " {$created} esedékes tétel bekerült a nyilvántartásba.";
+        }
+
+        $recurring->refresh();
+
+        if (! $recurring->is_active) {
+            return ' Szünetel, ezért nem keletkezik belőle tétel.';
+        }
+
+        if ($recurring->start_month && $recurring->start_month->isFuture()) {
+            return ' Az első tétel '.$recurring->start_month->year.'. '
+                .MemberLedger::MONTHS_HU[$recurring->start_month->month].' hónapban keletkezik.';
+        }
+
+        return ' Az esedékes tétel már szerepelt a nyilvántartásban.';
     }
 
     public function destroyRecurring(RecurringSharedCost $recurring): RedirectResponse
