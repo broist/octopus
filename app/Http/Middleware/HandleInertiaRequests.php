@@ -120,12 +120,16 @@ class HandleInertiaRequests extends Middleware
                 'icon' => $module['icon'],
                 'group' => $module['group'],
                 'children' => collect($module['children'] ?? [])
+                    // Az almenü külön képességhez is köthető (pl. a tagi kölcsön
+                    // nyilvántartás), különben a modul joga elég hozzá.
+                    ->filter(fn (array $child) => ! isset($child['ability']) || $user->can($child['ability']))
                     ->map(fn (array $child) => [
                         'key' => $child['key'],
                         'label' => $child['label'],
                         'route' => $child['route'],
                         'tab' => $child['tab'] ?? null,
                     ])
+                    ->values()
                     ->all(),
             ])
             ->values()

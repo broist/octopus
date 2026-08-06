@@ -8,10 +8,12 @@ use App\Models\Folder;
 use App\Models\Partner;
 use App\Models\Project;
 use App\Models\User;
+use App\Services\LedgerIngestor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -204,7 +206,9 @@ class DocumentController extends Controller
 
         $count = 0;
         $newFolders = 0;
-        DB::transaction(function () use ($data, $names, $paths, $folder, $user, $request, &$count, &$newFolders) {
+        /** @var array<int, Document> $created */
+        $created = [];
+        DB::transaction(function () use ($data, $names, $paths, $folder, $user, $request, &$count, &$newFolders, &$created) {
             $cache = [];
 
             foreach ($request->file('files') as $i => $file) {
@@ -257,9 +261,17 @@ class DocumentController extends Controller
                 ]);
 
                 $document->project?->logActivity('dokumentum', "Dokumentum feltöltve: {$document->title}");
+                $created[] = $document;
                 $count++;
             }
         });
+
+        // A Pénzügy / Tagi kölcsön figyelt mappájába érkező számla PDF-ekből
+        // azonnal keletkezik egy esedékes befizetés-sor. A tranzakción KÍVÜL
+        // fut, és soha nem dobhat: a feltöltésnek akkor is sikerülnie kell, ha
+        // a számla nem olvasható ki. (Az ütemezett `ledger:scan` pótolja azt,
+        // ami így kimaradt.)
+        $this->ingestLedgerInvoices($created);
 
         // Szakaszolt (mappa-)feltöltésnél a kliens axiosszal küld: JSON kell,
         // hogy össze tudja adni a köröket, és ne kérje le közben az oldalt.
@@ -278,6 +290,32 @@ class DocumentController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * A most feltöltött dokumentumok átadása a Tagi kölcsön modulnak. Csak a
+     * figyelt mappába (Fájlkezelő → Pénzügy/Könyvelő) került PDF-ekből lesz
+     * költség-sor; minden más érintetlen marad.
+     *
+     * @param  array<int, Document>  $documents
+     */
+    private function ingestLedgerInvoices(array $documents): void
+    {
+        if ($documents === []) {
+            return;
+        }
+
+        try {
+            $ingestor = app(LedgerIngestor::class);
+
+            foreach ($documents as $document) {
+                $ingestor->ingestIfWatched($document);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Számla-feldolgozás kihagyva a feltöltés után', [
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

@@ -41,7 +41,14 @@ class Modules
                 ['key' => 'ajanlatok.fizetes',    'label' => 'Fizetési ütem',  'route' => 'ajanlatok.tab',        'tab' => 'fizetes'],
                 ['key' => 'ajanlatok.ugyfel',     'label' => 'Ügyfél nézet',   'route' => 'ajanlatok.tab',        'tab' => 'ugyfel'],
             ]],
-            ['key' => 'finance',        'label' => 'Pénzügy / Költségvetés',      'route' => 'finance.index',  'icon' => 'Wallet',          'group' => 'operations'],
+            // Pénzügy: a projektek terv-vs-tény nézete mellett a tagi kölcsön /
+            // közös költség nyilvántartás. Utóbbi tulajdonosi adat, ezért külön
+            // képességhez kötött (lásd AppServiceProvider: finance.ledger) —
+            // az almenü is csak annak látszik, aki jogosult rá.
+            ['key' => 'finance',        'label' => 'Pénzügy / Költségvetés',      'route' => 'finance.index',  'icon' => 'Wallet',          'group' => 'operations', 'children' => [
+                ['key' => 'finance.projects', 'label' => 'Projektek',              'route' => 'finance.index',  'tab' => null],
+                ['key' => 'finance.ledger',   'label' => 'Tagi kölcsön',           'route' => 'finance.ledger', 'tab' => null, 'ability' => 'finance.ledger'],
+            ]],
             ['key' => 'daily-reports',  'label' => 'Napi jelentés / Munkanapló',  'route' => 'daily-reports.index', 'icon' => 'ClipboardList', 'group' => 'operations'],
             ['key' => 'qa',             'label' => 'Minőség / Munkavédelem',      'route' => 'qa.index',       'icon' => 'ShieldCheck',     'group' => 'operations'],
             ['key' => 'communication',  'label' => 'Kommunikáció',                'route' => 'communication.index', 'icon' => 'MessageSquare', 'group' => 'operations'],

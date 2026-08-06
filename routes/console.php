@@ -19,3 +19,12 @@ Schedule::command('leads:fetch')
 Schedule::command('notifications:deadlines')
     ->dailyAt('07:00')
     ->withoutOverlapping();
+
+// Tagi kölcsön: a figyelt mappába került számla PDF-ek utószedése és az
+// ismétlődő közös költségek havi tételeinek legyártása. A feltöltés maga már
+// azonnal feldolgozza a PDF-et — ez az a háló, ami az áthelyezéssel/WebDAV-on
+// érkezett fájlokat is elkapja.
+Schedule::command('ledger:scan')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

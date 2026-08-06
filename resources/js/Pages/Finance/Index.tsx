@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import AppLayout from '@/Layouts/AppLayout';
 import PageHeader from '@/Components/PageHeader';
 import StatusChip from '@/Components/StatusChip';
+import FinanceNav from '@/Pages/Finance/Partials/FinanceNav';
 import { usePageProps } from '@/hooks/usePageProps';
 import type { FinanceRow } from '@/types/models';
 
@@ -87,6 +88,8 @@ export default function Index() {
                 title="Pénzügy / Költségvetés"
                 subtitle="Projektenkénti bevétel, tényleges költség és nyereségesség — terv-vs-tény."
             />
+
+            <FinanceNav active="projects" />
 
             {/* Összesítők */}
             <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">

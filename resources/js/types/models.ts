@@ -702,6 +702,109 @@ export interface FinanceQuote {
     gross_offer: number;
 }
 
+// --- Tagi kölcsön és közös költségek (a Pénzügy modul almenüje) ---
+
+export interface LedgerMember {
+    id: number;
+    name: string;
+    user_name: string | null;
+    default_share: number;
+    is_active: boolean;
+    owed_huf: number;
+    paid_huf: number;
+    balance_huf: number;
+}
+
+export interface LedgerShare {
+    id: number;
+    member_id: number;
+    member_name: string;
+    share_percent: number;
+    amount: number;
+    amount_huf: number;
+    paid_huf: number;
+    outstanding_huf: number;
+    settled: boolean;
+}
+
+export interface LedgerCost {
+    id: number;
+    title: string;
+    category: string;
+    category_label: string;
+    period_month: string | null;
+    period_label: string | null;
+    due_on: string;
+    issued_on: string | null;
+    overdue: boolean;
+    currency: string;
+    amount: number;
+    net_amount: number | null;
+    vat_amount: number | null;
+    exchange_rate: number;
+    amount_huf: number;
+    supplier_name: string | null;
+    invoice_number: string | null;
+    source: string;
+    source_label: string;
+    needs_review: boolean;
+    parse_note: string | null;
+    note: string | null;
+    document_id: number | null;
+    document_url: string | null;
+    outstanding_huf: number;
+    settled: boolean;
+    shares: LedgerShare[];
+}
+
+export interface LedgerPayment {
+    id: number;
+    member_id: number;
+    member_name: string;
+    paid_on: string;
+    currency: string;
+    amount: number;
+    amount_huf: number;
+    exchange_rate: number;
+    note: string | null;
+    cost_id: number | null;
+    cost_title: string | null;
+}
+
+export interface LedgerWatch {
+    folder_id: number | null;
+    path: string | null;
+    is_default: boolean;
+    url: string | null;
+}
+
+export interface LedgerMemberSetting {
+    id: number;
+    name: string;
+    user_id: number | null;
+    user_name: string | null;
+    default_share: number;
+    is_active: boolean;
+    sort_order: number;
+    has_history: boolean;
+}
+
+export interface LedgerRecurring {
+    id: number;
+    title: string;
+    category: string;
+    category_label: string;
+    currency: string;
+    amount: number;
+    exchange_rate: number;
+    due_day: number;
+    start_month: string | null;
+    last_period: string | null;
+    is_active: boolean;
+    note: string | null;
+    shares: { member_id: number; percent: number }[];
+}
+
 // --- Napi jelentés / Munkanapló (11. modul) ---
 
 export type WeatherIcon = 'sun' | 'partly' | 'cloud' | 'fog' | 'drizzle' | 'rain' | 'snow' | 'storm';
